@@ -54,15 +54,26 @@ namespace JunoSidebar.Wpf
         const uint SWP_NOACTIVATE = 0x0010;
         const uint SWP_NOSIZE = 0x0001;
         const uint SWP_NOZORDER = 0x0004;
+        const uint SWP_NOMOVE = 0x0002;
 
         public MainWindow()
         {
             InitializeComponent();
             Loaded += MainWindow_Loaded;
             MouseRightButtonUp += MainWindow_MouseRightButtonUp;
+            Closing += MainWindow_Closing;
             _windowAdjustmentTimer = new DispatcherTimer();
             _windowAdjustmentTimer.Interval = TimeSpan.FromMilliseconds(500);
             _windowAdjustmentTimer.Tick += (s, e) => AdjustOtherWindows();
+        }
+
+        private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            // Restore windows to their original state when the application closes
+            if (_dockingService != null)
+            {
+                _dockingService.RestoreWindowsOnExit();
+            }
         }
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -90,6 +101,11 @@ namespace JunoSidebar.Wpf
             );
             
             SetTopmost(true);
+            
+            // Perform immediate window adjustment at startup
+            _dockingService.InitialAdjustment();
+            
+            // Then also start the timer for ongoing adjustments
             _windowAdjustmentTimer.Start();
         }
 
@@ -155,7 +171,7 @@ namespace JunoSidebar.Wpf
         {
             if (_dockingService != null)
             {
-                _dockingService.AdjustForegroundWindow();
+                _dockingService.AdjustAllWindows();
             }
         }
 
@@ -203,6 +219,9 @@ namespace JunoSidebar.Wpf
                         JsonSerializer.Serialize(new { action = "resize", width = newWidth })
                     );
                 }
+                
+                // Adjust other windows during drag for real-time feedback
+                AdjustOtherWindows();
             }
         }
 
@@ -214,15 +233,25 @@ namespace JunoSidebar.Wpf
                 ReleaseMouseCapture();
                 
                 double targetWidth;
+                bool newExpandedState;
                 if (Width < (COLLAPSED_WIDTH + EXPANDED_WIDTH) / 2)
                 {
                     targetWidth = COLLAPSED_WIDTH;
-                    _isExpanded = false;
+                    newExpandedState = false;
                 }
                 else
                 {
                     targetWidth = EXPANDED_WIDTH;
-                    _isExpanded = true;
+                    newExpandedState = true;
+                }
+                
+                // Only update if the state changed
+                if (newExpandedState != _isExpanded)
+                {
+                    _isExpanded = newExpandedState;
+                    
+                    // Notify the DockingService of the state change
+                    _dockingService.SidebarSizeChanged(_isExpanded);
                 }
                 
                 // Resize window using Win32 API and reposition to keep right edge fixed
@@ -310,14 +339,14 @@ namespace JunoSidebar.Wpf
             Application.Current.Shutdown();
         }
 
-        // Re-added this constant that was removed in the previous update
-        const uint SWP_NOMOVE = 0x0002;
-
         public void SetExpandedState(bool expanded)
         {
             Dispatcher.Invoke(() => 
             {
                 Debug.WriteLine($"Setting expanded state: {expanded}, changing width from {Width} to {(expanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH)}");
+                
+                // Check if we're actually changing the state
+                bool isStateChange = _isExpanded != expanded;
                 _isExpanded = expanded;
                 
                 double targetWidth = expanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH;
@@ -356,7 +385,16 @@ namespace JunoSidebar.Wpf
                     Debug.WriteLine($"Sent expanded state back to WebView: {_isExpanded}");
                 }
                 
-                AdjustOtherWindows();
+                // Notify the DockingService of the state change
+                if (isStateChange)
+                {
+                    _dockingService.SidebarSizeChanged(_isExpanded);
+                }
+                else
+                {
+                    // Even if not a state change, still adjust windows
+                    AdjustOtherWindows();
+                }
             });
         }
     }
