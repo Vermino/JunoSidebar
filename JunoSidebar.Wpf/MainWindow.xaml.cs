@@ -1,5 +1,4 @@
-﻿// File: JunoSidebar.Wpf/MainWindow.xaml.cs
-
+﻿// File: JunoSidebar/JunoSidebar.Wpf/MainWindow.xaml.cs
 using Microsoft.Web.WebView2.Core;
 using System;
 using System.Diagnostics;
@@ -13,9 +12,13 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using JunoSidebar.Wpf.Services;
+using JunoSidebar.Wpf.Services.Tools;
 
 namespace JunoSidebar.Wpf
 {
+    /// <summary>
+    /// Interaction logic for MainWindow.xaml
+    /// </summary>
     public partial class MainWindow : Window
     {
         private bool _isDragging = false;
@@ -27,19 +30,19 @@ namespace JunoSidebar.Wpf
         private const double EXPANDED_WIDTH = 320;
         private DockingService _dockingService;
         private WebViewService _webViewService;
+        private CoreEngine _coreEngine;
         private DispatcherTimer _windowAdjustmentTimer;
 
-        // Win32 API declarations for window management
         [DllImport("user32.dll")]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-        
+
         [DllImport("user32.dll")]
         static extern IntPtr GetForegroundWindow();
-        
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-        
+
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT
         {
@@ -48,7 +51,7 @@ namespace JunoSidebar.Wpf
             public int Right;
             public int Bottom;
         }
-        
+
         static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
         const uint SWP_NOACTIVATE = 0x0010;
@@ -56,6 +59,9 @@ namespace JunoSidebar.Wpf
         const uint SWP_NOZORDER = 0x0004;
         const uint SWP_NOMOVE = 0x0002;
 
+        /// <summary>
+        /// Initializes a new instance of the MainWindow class.
+        /// </summary>
         public MainWindow()
         {
             InitializeComponent();
@@ -67,20 +73,23 @@ namespace JunoSidebar.Wpf
             _windowAdjustmentTimer.Tick += (s, e) => AdjustOtherWindows();
         }
 
+        /// <summary>
+        /// Handler for the window closing event.
+        /// </summary>
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            // Restore windows to their original state when the application closes
             if (_dockingService != null)
             {
                 _dockingService.RestoreWindowsOnExit();
             }
         }
 
+        /// <summary>
+        /// Handler for the window loaded event.
+        /// </summary>
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             _hwnd = new WindowInteropHelper(this).Handle;
-            
-            // Position window at right edge of screen
             var workArea = SystemParameters.WorkArea;
             Left = workArea.Right - Width;
             Top = workArea.Top;
@@ -95,48 +104,46 @@ namespace JunoSidebar.Wpf
                 () => Left
             );
             
+            // Initialize WebViewService
             _webViewService = new WebViewService(
                 WebView.CoreWebView2,
                 SetExpandedState
             );
+
+            // Initialize Core Engine
+            _coreEngine = new CoreEngine(WebView.CoreWebView2);
+            await _coreEngine.InitializeAsync();
             
             SetTopmost(true);
-            
-            // Perform immediate window adjustment at startup
             _dockingService.InitialAdjustment();
-            
-            // Then also start the timer for ongoing adjustments
             _windowAdjustmentTimer.Start();
         }
 
+        /// <summary>
+        /// Initializes the WebView component.
+        /// </summary>
         private async Task InitializeWebView()
         {
             try
             {
-                string webViewUserDataFolder = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "JunoSidebar",
-                    "WebView2Data");
-                    
+                string webViewUserDataFolder = App.WebViewUserDataFolder;
                 var webView2Environment = await CoreWebView2Environment.CreateAsync(null, webViewUserDataFolder);
                 await WebView.EnsureCoreWebView2Async(webView2Environment);
                 
                 WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
-                WebView.CoreWebView2.Settings.AreDevToolsEnabled = Debugger.IsAttached;
+                WebView.CoreWebView2.Settings.AreDevToolsEnabled = App.IsDebugMode;
                 WebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
                 WebView.CoreWebView2.Settings.IsZoomControlEnabled = false;
                 
                 WebView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
                 WebView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
                 
-                // For development, use localhost
-                if (Debugger.IsAttached)
+                if (App.IsDebugMode)
                 {
                     WebView.CoreWebView2.Navigate("http://localhost:3000");
                 }
                 else
                 {
-                    // For production, use embedded resources
                     string htmlFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "index.html");
                     if (File.Exists(htmlFilePath))
                     {
@@ -157,6 +164,9 @@ namespace JunoSidebar.Wpf
             }
         }
 
+        /// <summary>
+        /// Sets the window topmost state.
+        /// </summary>
         private void SetTopmost(bool isTopmost)
         {
             SetWindowPos(
@@ -167,6 +177,9 @@ namespace JunoSidebar.Wpf
             );
         }
 
+        /// <summary>
+        /// Adjusts other windows to avoid overlap with the sidebar.
+        /// </summary>
         private void AdjustOtherWindows()
         {
             if (_dockingService != null)
@@ -175,6 +188,11 @@ namespace JunoSidebar.Wpf
             }
         }
 
+        // Handle drag to resize sidebar
+
+        /// <summary>
+        /// Handler for mouse down on the drag handle.
+        /// </summary>
         private void DragHandle_MouseDown(object sender, MouseButtonEventArgs e)
         {
             _isDragging = true;
@@ -183,6 +201,9 @@ namespace JunoSidebar.Wpf
             CaptureMouse();
         }
 
+        /// <summary>
+        /// Handler for mouse move on the drag handle.
+        /// </summary>
         private void DragHandle_MouseMove(object sender, MouseEventArgs e)
         {
             if (_isDragging)
@@ -191,13 +212,10 @@ namespace JunoSidebar.Wpf
                 double deltaX = currentPosition.X - _startPoint.X;
                 double newWidth = Math.Max(COLLAPSED_WIDTH, _originalWidth - deltaX);
                 
-                // Update the window width and position using SetWindowPos
                 RECT windowRect;
                 if (GetWindowRect(_hwnd, out windowRect))
                 {
-                    // Calculate new left position to keep the right edge fixed
                     int newLeft = windowRect.Right - (int)newWidth;
-                    
                     SetWindowPos(
                         _hwnd,
                         IntPtr.Zero,
@@ -208,7 +226,6 @@ namespace JunoSidebar.Wpf
                         SWP_NOZORDER | SWP_NOACTIVATE
                     );
                     
-                    // Keep WPF properties in sync
                     Width = newWidth;
                     Left = newLeft;
                 }
@@ -220,11 +237,13 @@ namespace JunoSidebar.Wpf
                     );
                 }
                 
-                // Adjust other windows during drag for real-time feedback
                 AdjustOtherWindows();
             }
         }
 
+        /// <summary>
+        /// Handler for mouse up on the drag handle.
+        /// </summary>
         private void DragHandle_MouseUp(object sender, MouseButtonEventArgs e)
         {
             if (_isDragging)
@@ -234,6 +253,7 @@ namespace JunoSidebar.Wpf
                 
                 double targetWidth;
                 bool newExpandedState;
+                
                 if (Width < (COLLAPSED_WIDTH + EXPANDED_WIDTH) / 2)
                 {
                     targetWidth = COLLAPSED_WIDTH;
@@ -245,22 +265,16 @@ namespace JunoSidebar.Wpf
                     newExpandedState = true;
                 }
                 
-                // Only update if the state changed
                 if (newExpandedState != _isExpanded)
                 {
                     _isExpanded = newExpandedState;
-                    
-                    // Notify the DockingService of the state change
                     _dockingService.SidebarSizeChanged(_isExpanded);
                 }
                 
-                // Resize window using Win32 API and reposition to keep right edge fixed
                 RECT windowRect;
                 if (GetWindowRect(_hwnd, out windowRect))
                 {
-                    // Calculate new left position to keep the right edge fixed
                     int newLeft = windowRect.Right - (int)targetWidth;
-                    
                     SetWindowPos(
                         _hwnd,
                         IntPtr.Zero,
@@ -271,7 +285,6 @@ namespace JunoSidebar.Wpf
                         SWP_NOZORDER | SWP_NOACTIVATE
                     );
                     
-                    // Keep WPF properties in sync
                     Width = targetWidth;
                     Left = newLeft;
                 }
@@ -287,11 +300,19 @@ namespace JunoSidebar.Wpf
             }
         }
 
+        // WebView2 event handlers
+
+        /// <summary>
+        /// Handler for WebView message received event.
+        /// </summary>
         private void CoreWebView2_WebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             _webViewService?.HandleWebMessage(e.WebMessageAsJson);
         }
 
+        /// <summary>
+        /// Handler for WebView navigation completed event.
+        /// </summary>
         private void CoreWebView2_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             if (e.IsSuccess)
@@ -309,11 +330,19 @@ namespace JunoSidebar.Wpf
             }
         }
 
+        // Context menu handlers
+
+        /// <summary>
+        /// Handler for mouse right button up event.
+        /// </summary>
         private void MainWindow_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
             SidebarContextMenu.IsOpen = true;
         }
 
+        /// <summary>
+        /// Handler for always on top menu item click.
+        /// </summary>
         private void AlwaysOnTopMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var menuItem = sender as MenuItem;
@@ -324,6 +353,9 @@ namespace JunoSidebar.Wpf
             }
         }
 
+        /// <summary>
+        /// Handler for settings menu item click.
+        /// </summary>
         private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
         {
             if (WebView.CoreWebView2 != null)
@@ -334,33 +366,33 @@ namespace JunoSidebar.Wpf
             }
         }
 
+        /// <summary>
+        /// Handler for exit menu item click.
+        /// </summary>
         private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
         {
             Application.Current.Shutdown();
         }
 
+        /// <summary>
+        /// Sets the expanded state of the sidebar.
+        /// </summary>
         public void SetExpandedState(bool expanded)
         {
             Dispatcher.Invoke(() => 
             {
                 Debug.WriteLine($"Setting expanded state: {expanded}, changing width from {Width} to {(expanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH)}");
                 
-                // Check if we're actually changing the state
                 bool isStateChange = _isExpanded != expanded;
                 _isExpanded = expanded;
-                
                 double targetWidth = expanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH;
                 
-                // Use Win32 API to resize the window directly while preserving the right edge position
                 RECT windowRect;
                 if (GetWindowRect(_hwnd, out windowRect))
                 {
                     int currentHeight = windowRect.Bottom - windowRect.Top;
-                    
-                    // Calculate new left position to keep the right edge fixed
                     int newLeft = windowRect.Right - (int)targetWidth;
                     
-                    // Use SetWindowPos to change both size and position
                     SetWindowPos(
                         _hwnd,
                         IntPtr.Zero,
@@ -371,10 +403,8 @@ namespace JunoSidebar.Wpf
                         SWP_NOZORDER | SWP_NOACTIVATE
                     );
                     
-                    // Update the WPF properties to keep them in sync
                     Width = targetWidth;
                     Left = newLeft;
-                    
                     Debug.WriteLine($"Window resized using Win32 API to width: {targetWidth}, new left: {newLeft}");
                 }
                 
@@ -385,14 +415,12 @@ namespace JunoSidebar.Wpf
                     Debug.WriteLine($"Sent expanded state back to WebView: {_isExpanded}");
                 }
                 
-                // Notify the DockingService of the state change
                 if (isStateChange)
                 {
                     _dockingService.SidebarSizeChanged(_isExpanded);
                 }
                 else
                 {
-                    // Even if not a state change, still adjust windows
                     AdjustOtherWindows();
                 }
             });
