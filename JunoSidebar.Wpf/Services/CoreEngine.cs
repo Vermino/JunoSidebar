@@ -1,8 +1,12 @@
-// File: JunoSidebar/JunoSidebar.Wpf/Services/CoreEngine.cs
+// File: JunoSidebar.Wpf/Services/CoreEngine.cs
+
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.IO;
+using System.Diagnostics;
+using System.Linq;
 using JunoSidebar.Wpf.Models;
 using JunoSidebar.Wpf.Services.LLM;
 using JunoSidebar.Wpf.Services.Tools;
@@ -11,9 +15,6 @@ using Microsoft.Web.WebView2.Core;
 
 namespace JunoSidebar.Wpf.Services
 {
-    /// <summary>
-    /// Core engine that coordinates all services and handles communication with the UI.
-    /// </summary>
     public class CoreEngine
     {
         private readonly CoreWebView2 _webView;
@@ -26,25 +27,35 @@ namespace JunoSidebar.Wpf.Services
         private readonly ContextManager _contextManager;
         private readonly WebService _webService;
         private readonly ILLMClient _llmClient;
-        
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly string _settingsPath;
+        private readonly string _llmSettingsPath;
+        private readonly string _uiSettingsPath;
         private bool _isInitialized = false;
+        private bool _isSavingSettings = false;
 
-        /// <summary>
-        /// Initializes a new instance of the CoreEngine class.
-        /// </summary>
-        /// <param name="webView">The WebView2 instance used for the UI.</param>
         public CoreEngine(CoreWebView2 webView)
         {
             _webView = webView ?? throw new ArgumentNullException(nameof(webView));
-            
             _jsonOptions = new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = true
+                WriteIndented = true,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
             };
             
-            // Create services
+            // Initialize paths
+            string appDataDir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string junoDir = Path.Combine(appDataDir, "JunoSidebar");
+            
+            _settingsPath = Path.Combine(junoDir, "settings.json");
+            _llmSettingsPath = Path.Combine(junoDir, "llm_settings.json");
+            _uiSettingsPath = Path.Combine(junoDir, "ui_settings.json");
+            
+            // Ensure directories exist
+            Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath));
+            
+            // Initialize services
             _webService = new WebService();
             _permissionManager = new PermissionManager();
             _llmFactory = new LLMFactory();
@@ -53,8 +64,6 @@ namespace JunoSidebar.Wpf.Services
             _personalityManager = new PersonalityManager();
             _toolRegistry = new ToolRegistry(_permissionManager);
             _voiceService = new VoiceService(_webService);
-            
-            // Create the conversation service with all dependencies
             _conversationService = new ConversationService(
                 _llmClient,
                 _contextManager,
@@ -63,7 +72,7 @@ namespace JunoSidebar.Wpf.Services
                 _voiceService
             );
             
-            // Set up event handlers
+            // Register for events
             _webView.WebMessageReceived += OnWebMessageReceived;
             _conversationService.AssistantStateChanged += OnAssistantStateChanged;
             _conversationService.QueryUpdated += OnQueryUpdated;
@@ -73,10 +82,6 @@ namespace JunoSidebar.Wpf.Services
             _voiceService.AudioLevelChanged += OnAudioLevelChanged;
         }
 
-        /// <summary>
-        /// Initializes all services.
-        /// </summary>
-        /// <returns>A task representing the asynchronous operation.</returns>
         public async Task InitializeAsync()
         {
             if (_isInitialized)
@@ -84,61 +89,67 @@ namespace JunoSidebar.Wpf.Services
             
             try
             {
-                // Initialize all services in the correct order
+                Debug.WriteLine("CoreEngine: Initializing services...");
+                
+                // Initialize services in order
                 await _permissionManager.InitializeAsync();
                 await _personalityManager.InitializeAsync();
                 await _toolRegistry.InitializeAsync();
+                await ToolRegistryInitializer.RegisterBuiltInToolsAsync(_toolRegistry);
+                
                 _voiceService.InitializeSpeechRecognition();
                 
-                // Mark as initialized
+                // Apply saved settings
+                await ApplyLLMSettings();
+                
                 _isInitialized = true;
                 
-                // Send initialization complete message to UI
                 SendMessageToUI("initialized", new { success = true });
+                Debug.WriteLine("CoreEngine: Initialization completed successfully");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error initializing services: {ex.Message}");
+                Debug.WriteLine($"CoreEngine: Error initializing services: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 SendMessageToUI("initializationError", new { error = ex.Message });
             }
         }
-
-        // Private helper methods for handling messages from UI
 
         private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             try
             {
                 string message = e.WebMessageAsJson;
-                var messageObj = JsonSerializer.Deserialize<WebMessage>(message, _jsonOptions);
+                Debug.WriteLine($"CoreEngine: Received message from UI: {message}");
                 
+                var messageObj = JsonSerializer.Deserialize<WebMessage>(message, _jsonOptions);
                 if (messageObj == null || string.IsNullOrEmpty(messageObj.Action))
                 {
+                    Debug.WriteLine("CoreEngine: Invalid message received: null or empty action");
                     return;
                 }
                 
-                // Handle the message based on the action
                 switch (messageObj.Action.ToLowerInvariant())
                 {
                     case "getpersonalities":
                         HandleGetPersonalities();
                         break;
-                    
+                        
                     case "setpersonality":
                         if (messageObj.TryGetProperty("id", out string? personalityId) && personalityId != null)
                         {
                             HandleSetPersonality(personalityId);
                         }
                         break;
-                    
+                        
                     case "startlistening":
                         _conversationService.StartListening();
                         break;
-                    
+                        
                     case "stoplistening":
                         _conversationService.StopListening();
                         break;
-                    
+                        
                     case "stopresponding":
                         _conversationService.CancelCurrentConversation();
                         break;
@@ -152,28 +163,27 @@ namespace JunoSidebar.Wpf.Services
                             }
                         }
                         break;
-                    
+                        
                     case "submitquery":
                         if (messageObj.TryGetProperty("query", out string? query) && query != null)
                         {
                             Task.Run(() => _conversationService.ProcessQueryAsync(query));
                         }
                         break;
-                    
+                        
                     case "executetool":
                         if (messageObj.TryGetProperty("id", out string? toolId) && toolId != null)
                         {
                             var parameters = messageObj.TryGetProperty("parameters", out Dictionary<string, object>? toolParams) ? 
                                 toolParams : new Dictionary<string, object>();
-                            
                             HandleExecuteTool(toolId, parameters ?? new Dictionary<string, object>());
                         }
                         break;
-                    
+                        
                     case "getvoicesettings":
                         HandleGetVoiceSettings();
                         break;
-                    
+                        
                     case "setvoiceinput":
                         if (messageObj.TryGetProperty("enabled", out bool? inputEnabled) && inputEnabled.HasValue)
                         {
@@ -181,7 +191,7 @@ namespace JunoSidebar.Wpf.Services
                             SendMessageToUI("voiceSettings", _voiceService.GetVoiceSettings());
                         }
                         break;
-                    
+                        
                     case "setvoiceoutput":
                         if (messageObj.TryGetProperty("enabled", out bool? outputEnabled) && outputEnabled.HasValue)
                         {
@@ -189,7 +199,7 @@ namespace JunoSidebar.Wpf.Services
                             SendMessageToUI("voiceSettings", _voiceService.GetVoiceSettings());
                         }
                         break;
-                    
+                        
                     case "testvoice":
                         Task.Run(() => _voiceService.TestVoiceAsync());
                         break;
@@ -216,40 +226,71 @@ namespace JunoSidebar.Wpf.Services
                             _voiceService.SetOutputDevice(outputDeviceIndex.Value);
                         }
                         break;
-                    
+                        
                     case "getsettings":
                         HandleGetSettings();
                         break;
-                    
+                        
                     case "savesettings":
                         if (messageObj.TryGetProperty("settings", out Dictionary<string, object>? settings) && settings != null)
                         {
                             HandleSaveSettings(settings);
                         }
                         break;
-                    
+                        
                     case "getllmproviders":
                         HandleGetLLMProviders();
                         break;
-                    
+                        
                     case "getllmmodels":
                         HandleGetLLMModels();
                         break;
-                    
+                        
                     case "testllmconnection":
                         Task.Run(() => TestLLMConnectionAsync());
                         break;
-                    
+                        
                     case "clearconversationhistory":
                         _contextManager.ClearHistory();
                         SendMessageToUI("conversationCleared", new { success = true });
+                        break;
+                        
+                    case "managetools":
+                        HandleManageTools();
+                        break;
+                        
+                    default:
+                        Debug.WriteLine($"CoreEngine: Unknown action received: {messageObj.Action}");
                         break;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error handling web message: {ex.Message}");
+                Debug.WriteLine($"CoreEngine: Error handling web message: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
             }
+        }
+
+        private void HandleManageTools()
+        {
+            var tools = _toolRegistry.GetAllTools();
+            var toolsList = new List<object>();
+            
+            foreach (var tool in tools)
+            {
+                toolsList.Add(new
+                {
+                    id = tool.Id,
+                    name = tool.Name,
+                    description = tool.Description,
+                    version = tool.Version,
+                    enabled = true,
+                    requiredPermissions = tool.RequiredPermissions,
+                    hasPermission = tool.RequiredPermissions.All(p => _permissionManager.HasPermission(p))
+                });
+            }
+            
+            SendMessageToUI("toolsData", new { tools = toolsList });
         }
 
         private void HandleGetPersonalities()
@@ -277,22 +318,39 @@ namespace JunoSidebar.Wpf.Services
 
         private async void HandleExecuteTool(string toolId, Dictionary<string, object> parameters)
         {
-            var result = await _conversationService.ExecuteToolAsync(toolId, parameters);
-            
-            SendMessageToUI("toolExecuted", new
+            try
             {
-                toolId,
-                success = result.Success,
-                result = result.Output,
-                error = result.Error
-            });
+                Debug.WriteLine($"CoreEngine: Executing tool: {toolId} with parameters: {JsonSerializer.Serialize(parameters, _jsonOptions)}");
+                
+                var result = await _conversationService.ExecuteToolAsync(toolId, parameters);
+                
+                SendMessageToUI("toolExecuted", new
+                {
+                    toolId,
+                    success = result.Success,
+                    result = result.Output ?? "No output",
+                    error = result.Error ?? ""
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"CoreEngine: Error executing tool {toolId}: {ex.Message}");
+                
+                SendMessageToUI("toolExecuted", new
+                {
+                    toolId,
+                    success = false,
+                    result = "Error",  
+                    error = $"Error executing tool: {ex.Message}"
+                });
+            }
         }
 
         private void HandleGetVoiceSettings()
         {
             SendMessageToUI("voiceSettings", _voiceService.GetVoiceSettings());
         }
-        
+
         private void HandleGetAudioDevices()
         {
             try
@@ -300,10 +358,11 @@ namespace JunoSidebar.Wpf.Services
                 var inputDevices = _voiceService.GetInputDevices();
                 var outputDevices = _voiceService.GetOutputDevices();
                 
-                Console.WriteLine($"Sending audio devices to UI: {inputDevices.Count} input devices, {outputDevices.Count} output devices");
+                Debug.WriteLine($"CoreEngine: Sending audio devices to UI: {inputDevices.Count} input devices, {outputDevices.Count} output devices");
+                
                 foreach (var device in inputDevices)
                 {
-                    Console.WriteLine($"Input device: {device.Name} (Index: {device.Index})");
+                    Debug.WriteLine($"CoreEngine: Input device: {device.Name} (Index: {device.Index})");
                 }
                 
                 SendMessageToUI("audioDevicesData", new
@@ -314,9 +373,8 @@ namespace JunoSidebar.Wpf.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error getting audio devices: {ex.Message}");
+                Debug.WriteLine($"CoreEngine: Error getting audio devices: {ex.Message}");
                 
-                // Send at least the default device as fallback
                 SendMessageToUI("audioDevicesData", new
                 {
                     inputDevices = new[] { new { index = -1, name = "Default Device" } },
@@ -327,36 +385,323 @@ namespace JunoSidebar.Wpf.Services
 
         private void HandleGetSettings()
         {
-            // Get settings from various services
-            var settings = new
+            try
             {
-                llm = new
+                var llmSettings = LoadLLMSettings();
+                var voiceSettings = _voiceService.GetVoiceSettings();
+                var uiSettings = LoadUISettings();
+                
+                var settings = new
                 {
-                    provider = "lmstudio",
-                    model = "local-model",
-                    baseUrl = "http://localhost:1234/v1",
-                    apiKey = "",
-                    temperature = 0.7f,
-                    maxTokens = 1024
-                },
-                voice = _voiceService.GetVoiceSettings(),
-                ui = new
-                {
-                    startupBehavior = "remember",
-                    theme = "light",
-                    alwaysOnTop = true
-                }
-            };
-            
-            SendMessageToUI("settingsData", new { settings });
+                    llm = llmSettings,
+                    voice = voiceSettings,
+                    ui = uiSettings
+                };
+                
+                SendMessageToUI("settingsData", new { settings });
+                Debug.WriteLine("CoreEngine: Settings sent to UI");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"CoreEngine: Error getting settings: {ex.Message}");
+                SendMessageToUI("settingsError", new { error = $"Failed to load settings: {ex.Message}" });
+            }
         }
 
-        private void HandleSaveSettings(Dictionary<string, object> settings)
+        private async void HandleSaveSettings(Dictionary<string, object> settings)
         {
-            // This would update settings across all services
-            // For now, we'll just acknowledge receipt
+            if (_isSavingSettings)
+            {
+                Debug.WriteLine("CoreEngine: Save operation already in progress, ignoring duplicate request");
+                return;
+            }
             
-            SendMessageToUI("settingsSaved", new { success = true });
+            _isSavingSettings = true;
+            
+            try
+            {
+                Debug.WriteLine($"CoreEngine: Saving settings...");
+                string previousProvider = "";
+                
+                if (settings.TryGetValue("llm", out var llmObj))
+                {
+                    Dictionary<string, object>? llmSettings = null;
+                    
+                    // Handle different types that might come from deserialization
+                    if (llmObj is JsonElement llmElem)
+                    {
+                        llmSettings = llmElem.Deserialize<Dictionary<string, object>>(_jsonOptions);
+                    }
+                    else if (llmObj is Dictionary<string, object> dictObj)
+                    {
+                        llmSettings = dictObj;
+                    }
+                    
+                    if (llmSettings != null)
+                    {
+                        // Get previous provider before saving
+                        var currentSettings = LoadLLMSettings();
+                        if (currentSettings.TryGetValue("provider", out var providerObj))
+                        {
+                            previousProvider = providerObj.ToString() ?? "";
+                        }
+                        
+                        SaveLLMSettings(llmSettings);
+                    }
+                }
+                
+                if (settings.TryGetValue("voice", out var voiceObj))
+                {
+                    Dictionary<string, object>? voiceSettings = null;
+                    
+                    if (voiceObj is JsonElement voiceElem)
+                    {
+                        voiceSettings = voiceElem.Deserialize<Dictionary<string, object>>(_jsonOptions);
+                    }
+                    else if (voiceObj is Dictionary<string, object> dictObj)
+                    {
+                        voiceSettings = dictObj;
+                    }
+                    
+                    if (voiceSettings != null)
+                    {
+                        SaveVoiceSettings(voiceSettings);
+                    }
+                }
+                
+                if (settings.TryGetValue("ui", out var uiObj))
+                {
+                    Dictionary<string, object>? uiSettings = null;
+                    
+                    if (uiObj is JsonElement uiElem)
+                    {
+                        uiSettings = uiElem.Deserialize<Dictionary<string, object>>(_jsonOptions);
+                    }
+                    else if (uiObj is Dictionary<string, object> dictObj)
+                    {
+                        uiSettings = dictObj;
+                    }
+                    
+                    if (uiSettings != null)
+                    {
+                        SaveUISettings(uiSettings);
+                    }
+                }
+                
+                // Save complete settings
+                string settingsDir = Path.GetDirectoryName(_settingsPath);
+                if (!Directory.Exists(settingsDir))
+                {
+                    Directory.CreateDirectory(settingsDir);
+                }
+                
+                string json = JsonSerializer.Serialize(settings, _jsonOptions);
+                await File.WriteAllTextAsync(_settingsPath, json);
+                
+                // Apply LLM settings
+                await ApplyLLMSettings();
+                
+                // Send success notification with previous provider for comparison
+                SendMessageToUI("settingsSaved", new { 
+                    success = true,
+                    previousProvider = previousProvider
+                });
+                
+                Debug.WriteLine("CoreEngine: Settings saved successfully");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"CoreEngine: Error saving settings: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+                SendMessageToUI("settingsSaved", new { success = false, error = ex.Message });
+            }
+            finally
+            {
+                _isSavingSettings = false;
+            }
+        }
+
+        private void SaveLLMSettings(Dictionary<string, object> llmSettings)
+        {
+            if (llmSettings == null)
+                return;
+            
+            Debug.WriteLine("CoreEngine: Saving LLM settings");
+            
+            // Extract properties with error handling
+            string? provider = GetStringValue(llmSettings, "provider");
+            string? model = GetStringValue(llmSettings, "model");
+            string? baseUrl = GetStringValue(llmSettings, "baseUrl");
+            string? apiKey = GetStringValue(llmSettings, "apiKey");
+            float temperature = GetFloatValue(llmSettings, "temperature", 0.7f);
+            int maxTokens = GetIntValue(llmSettings, "maxTokens", 1024);
+            
+            // Create cleaned settings dictionary
+            Dictionary<string, object> settingsCache = new Dictionary<string, object>
+            {
+                ["provider"] = provider ?? "lmstudio",
+                ["model"] = model ?? "local-model",
+                ["baseUrl"] = baseUrl ?? "http://localhost:1234/v1",
+                ["apiKey"] = apiKey ?? "",
+                ["temperature"] = temperature,
+                ["maxTokens"] = maxTokens
+            };
+            
+            // Ensure directory exists
+            Directory.CreateDirectory(Path.GetDirectoryName(_llmSettingsPath));
+            
+            // Serialize and save
+            string json = JsonSerializer.Serialize(settingsCache, _jsonOptions);
+            File.WriteAllText(_llmSettingsPath, json);
+            
+            Debug.WriteLine("CoreEngine: LLM settings saved");
+        }
+
+        private void SaveVoiceSettings(Dictionary<string, object> voiceSettings)
+        {
+            if (voiceSettings == null)
+                return;
+            
+            Debug.WriteLine("CoreEngine: Saving voice settings");
+            
+            // Extract boolean values
+            bool inputEnabled = GetBoolValue(voiceSettings, "inputEnabled", true);
+            bool outputEnabled = GetBoolValue(voiceSettings, "outputEnabled", true);
+            
+            // Extract other settings
+            string wakeWord = GetStringValue(voiceSettings, "wakeWord") ?? "Hey Juno";
+            string voiceId = GetStringValue(voiceSettings, "voiceId") ?? "default";
+            float speed = GetFloatValue(voiceSettings, "speed", 1.0f);
+            
+            // Apply settings to voice service
+            _voiceService.SetVoiceInputEnabled(inputEnabled);
+            _voiceService.SetVoiceOutputEnabled(outputEnabled);
+            _voiceService.SetWakeWord(wakeWord);
+            _voiceService.SetVoice(voiceId);
+            _voiceService.SetVoiceSpeed(speed);
+            
+            // Handle device settings
+            int inputDeviceIndex = GetIntValue(voiceSettings, "inputDeviceIndex", -1);
+            int outputDeviceIndex = GetIntValue(voiceSettings, "outputDeviceIndex", -1);
+            
+            _voiceService.SetInputDevice(inputDeviceIndex);
+            _voiceService.SetOutputDevice(outputDeviceIndex);
+            
+            Debug.WriteLine("CoreEngine: Voice settings saved");
+        }
+
+        private void SaveUISettings(Dictionary<string, object> uiSettings)
+        {
+            if (uiSettings == null)
+                return;
+            
+            Debug.WriteLine("CoreEngine: Saving UI settings");
+            
+            // Ensure directory exists
+            Directory.CreateDirectory(Path.GetDirectoryName(_uiSettingsPath));
+            
+            // Serialize and save
+            string json = JsonSerializer.Serialize(uiSettings, _jsonOptions);
+            File.WriteAllText(_uiSettingsPath, json);
+            
+            Debug.WriteLine("CoreEngine: UI settings saved");
+        }
+
+        private Dictionary<string, object> LoadLLMSettings()
+        {
+            if (File.Exists(_llmSettingsPath))
+            {
+                try
+                {
+                    string json = File.ReadAllText(_llmSettingsPath);
+                    var settings = JsonSerializer.Deserialize<Dictionary<string, object>>(json, _jsonOptions);
+                    if (settings != null)
+                    {
+                        return settings;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"CoreEngine: Error loading LLM settings: {ex.Message}");
+                }
+            }
+            
+            // Return default settings if file doesn't exist or loading fails
+            return new Dictionary<string, object>
+            {
+                ["provider"] = "lmstudio",
+                ["model"] = "local-model",
+                ["baseUrl"] = "http://localhost:1234/v1",
+                ["apiKey"] = "",
+                ["temperature"] = 0.7f,
+                ["maxTokens"] = 1024
+            };
+        }
+
+        private Dictionary<string, object> LoadUISettings()
+        {
+            if (File.Exists(_uiSettingsPath))
+            {
+                try
+                {
+                    string json = File.ReadAllText(_uiSettingsPath);
+                    var settings = JsonSerializer.Deserialize<Dictionary<string, object>>(json, _jsonOptions);
+                    if (settings != null)
+                    {
+                        return settings;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"CoreEngine: Error loading UI settings: {ex.Message}");
+                }
+            }
+            
+            // Return default settings if file doesn't exist or loading fails
+            return new Dictionary<string, object>
+            {
+                ["startupBehavior"] = "remember",
+                ["theme"] = "light",
+                ["alwaysOnTop"] = true
+            };
+        }
+
+        private async Task ApplyLLMSettings()
+        {
+            try
+            {
+                var settings = LoadLLMSettings();
+                
+                string provider = GetStringValue(settings, "provider") ?? "lmstudio";
+                string baseUrl = GetStringValue(settings, "baseUrl") ?? "http://localhost:1234/v1";
+                string apiKey = GetStringValue(settings, "apiKey") ?? "";
+                
+                // Check if provider enum conversion is possible
+                if (Enum.TryParse<LLMFactory.LLMProvider>(provider, true, out var providerEnum))
+                {
+                    // Create configuration dictionary
+                    var config = new Dictionary<string, string>
+                    {
+                        ["BaseUrl"] = baseUrl,
+                        ["ApiKey"] = apiKey
+                    };
+                    
+                    // Initialize a new client with the settings
+                    // Note: In a real implementation, we would recreate the client
+                    // but for now just log the intention
+                    Debug.WriteLine($"CoreEngine: Would apply LLM settings: Provider={provider}, BaseUrl={baseUrl}");
+                    
+                    // Force model refresh if client is a LMStudioClient
+                    if (_llmClient is LMStudioClient lmStudioClient)
+                    {
+                        _ = await lmStudioClient.GetAvailableModelsAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"CoreEngine: Error applying LLM settings: {ex.Message}");
+            }
         }
 
         private void HandleGetLLMProviders()
@@ -396,7 +741,8 @@ namespace JunoSidebar.Wpf.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error getting LLM models: {ex.Message}");
+                Debug.WriteLine($"CoreEngine: Error getting LLM models: {ex.Message}");
+                
                 SendMessageToUI("llmModelsData", new
                 {
                     models = new[]
@@ -411,23 +757,35 @@ namespace JunoSidebar.Wpf.Services
         {
             try
             {
-                // Simple test message
-                var messages = new List<LLMMessage>
-                {
-                    new LLMMessage { Role = "user", Content = "Hello, are you working?" }
-                };
+                Debug.WriteLine("CoreEngine: Testing LLM connection...");
                 
-                var response = await _llmClient.GetChatCompletionAsync(messages, "local-model");
-                
-                SendMessageToUI("llmConnectionTested", new
+                if (_llmClient is LMStudioClient lmStudioClient)
                 {
-                    success = true,
-                    message = "LLM connection successful"
-                });
+                    var success = await lmStudioClient.TestConnectionAsync();
+                    Debug.WriteLine($"CoreEngine: Connection test result: {success}");
+                    
+                    SendMessageToUI("llmConnectionTested", new
+                    {
+                        success,
+                        message = success ? "LLM connection successful" : "Could not connect to LM Studio"
+                    });
+                }
+                else
+                {
+                    var models = await _llmClient.GetAvailableModelsAsync();
+                    bool success = models.Any();
+                    
+                    SendMessageToUI("llmConnectionTested", new
+                    {
+                        success,
+                        message = success ? "LLM connection successful" : "Could not retrieve models from LLM provider"
+                    });
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error testing LLM connection: {ex.Message}");
+                Debug.WriteLine($"CoreEngine: Error testing LLM connection: {ex.Message}");
+                
                 SendMessageToUI("llmConnectionTested", new
                 {
                     success = false,
@@ -435,8 +793,6 @@ namespace JunoSidebar.Wpf.Services
                 });
             }
         }
-
-        // Event handlers
 
         private void OnAssistantStateChanged(object? sender, AssistantStateChangedEventArgs e)
         {
@@ -480,60 +836,170 @@ namespace JunoSidebar.Wpf.Services
             SendMessageToUI("audioLevels", new { levels });
         }
 
-        /// <summary>
-        /// Sends a message to the UI.
-        /// </summary>
-        /// <param name="action">The action type.</param>
-        /// <param name="data">The data to send.</param>
         private void SendMessageToUI(string action, object data)
         {
             try
             {
-                var message = new { action, data };
-                string json = JsonSerializer.Serialize(message, _jsonOptions);
+                // Create a wrapper object with the action and data
+                object messageObject;
+                
+                if (data.GetType().GetProperties().Length > 0)
+                {
+                    // Add the properties from the data object to a dictionary
+                    var props = new Dictionary<string, object>
+                    {
+                        ["action"] = action
+                    };
+                    
+                    foreach (var prop in data.GetType().GetProperties())
+                    {
+                        props[prop.Name] = prop.GetValue(data) ?? "";
+                    }
+                    
+                    messageObject = props;
+                }
+                else
+                {
+                    // If data has no properties, just use action
+                    messageObject = new { action };
+                }
+                
+                // Serialize the message and send it
+                string json = JsonSerializer.Serialize(messageObject, _jsonOptions);
                 _webView.PostWebMessageAsJson(json);
+                
+                // Log only the action to avoid filling the log with large payloads
+                Debug.WriteLine($"CoreEngine: Sent message to UI: {action}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error sending message to UI: {ex.Message}");
+                Debug.WriteLine($"CoreEngine: Error sending message to UI: {ex.Message}");
             }
         }
 
-        /// <summary>
-        /// Helper class for deserializing messages from the UI.
-        /// </summary>
+        // Helper methods for extracting values from dictionaries with type conversion
+        private string? GetStringValue(Dictionary<string, object> dict, string key)
+        {
+            if (dict.TryGetValue(key, out var value))
+            {
+                if (value is JsonElement elem)
+                {
+                    if (elem.ValueKind == JsonValueKind.String)
+                    {
+                        return elem.GetString();
+                    }
+                }
+                else if (value is string strValue)
+                {
+                    return strValue;
+                }
+            }
+            return null;
+        }
+
+        private bool GetBoolValue(Dictionary<string, object> dict, string key, bool defaultValue = false)
+        {
+            if (dict.TryGetValue(key, out var value))
+            {
+                if (value is JsonElement elem)
+                {
+                    if (elem.ValueKind == JsonValueKind.True)
+                    {
+                        return true;
+                    }
+                    else if (elem.ValueKind == JsonValueKind.False)
+                    {
+                        return false;
+                    }
+                    else if (elem.ValueKind == JsonValueKind.Number)
+                    {
+                        return elem.GetInt32() != 0;
+                    }
+                }
+                else if (value is bool boolValue)
+                {
+                    return boolValue;
+                }
+                else if (value is int intValue)
+                {
+                    return intValue != 0;
+                }
+            }
+            return defaultValue;
+        }
+
+        private int GetIntValue(Dictionary<string, object> dict, string key, int defaultValue = 0)
+        {
+            if (dict.TryGetValue(key, out var value))
+            {
+                if (value is JsonElement elem)
+                {
+                    if (elem.ValueKind == JsonValueKind.Number)
+                    {
+                        return elem.GetInt32();
+                    }
+                }
+                else if (value is int intValue)
+                {
+                    return intValue;
+                }
+                else if (int.TryParse(value.ToString(), out int parsedValue))
+                {
+                    return parsedValue;
+                }
+            }
+            return defaultValue;
+        }
+
+        private float GetFloatValue(Dictionary<string, object> dict, string key, float defaultValue = 0f)
+        {
+            if (dict.TryGetValue(key, out var value))
+            {
+                if (value is JsonElement elem)
+                {
+                    if (elem.ValueKind == JsonValueKind.Number)
+                    {
+                        return elem.GetSingle();
+                    }
+                }
+                else if (value is float floatValue)
+                {
+                    return floatValue;
+                }
+                else if (value is double doubleValue)
+                {
+                    return (float)doubleValue;
+                }
+                else if (float.TryParse(value.ToString(), out float parsedValue))
+                {
+                    return parsedValue;
+                }
+            }
+            return defaultValue;
+        }
+
         private class WebMessage
         {
-            /// <summary>
-            /// Gets or sets the action of the message.
-            /// </summary>
             public string Action { get; set; } = string.Empty;
-            
-            /// <summary>
-            /// Gets the data element of the message.
-            /// </summary>
             public JsonElement Data { get; set; }
             
-            /// <summary>
-            /// Tries to get a property from the data element.
-            /// </summary>
-            /// <typeparam name="T">The type to convert the property to.</typeparam>
-            /// <param name="propertyName">The name of the property.</param>
-            /// <param name="value">The output value if successful.</param>
-            /// <returns>True if the property was found and converted successfully, false otherwise.</returns>
             public bool TryGetProperty<T>(string propertyName, out T? value)
             {
                 value = default;
                 
-                if (!Data.TryGetProperty(propertyName, out var property))
-                {
-                    return false;
-                }
-                
                 try
                 {
-                    value = property.Deserialize<T>();
-                    return value != null;
+                    // Try to find the property in the Data element
+                    if (Data.ValueKind == JsonValueKind.Object && Data.TryGetProperty(propertyName, out var property))
+                    {
+                        value = property.Deserialize<T>(new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+                        return value != null;
+                    }
+                    
+                    return false;
                 }
                 catch
                 {

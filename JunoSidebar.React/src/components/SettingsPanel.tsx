@@ -1,4 +1,5 @@
-// File: JunoSidebar/JunoSidebar.React/src/components/SettingsPanel.tsx
+// File: JunoSidebar.React\src\components\SettingsPanel.tsx
+
 import React, { useState, useEffect } from 'react';
 import {
     X,
@@ -95,64 +96,61 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
             alwaysOnTop: true
         }
     });
-
     const [providers, setProviders] = useState<LLMProvider[]>([
         { id: 'lmstudio', displayName: 'LM Studio (Local)' }
     ]);
-
     const [models, setModels] = useState<LLMModel[]>([
         { id: 'local-model', displayName: 'Default Local Model' }
     ]);
-
     const [inputDevices, setInputDevices] = useState<AudioDevice[]>([
         { index: -1, name: 'Default Device' }
     ]);
-
     const [outputDevices, setOutputDevices] = useState<AudioDevice[]>([
         { index: -1, name: 'Default Device' }
     ]);
-
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
     const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'success' | 'error'>('unknown');
+    const [isLoadingModels, setIsLoadingModels] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
-            // Request settings from backend
-            WpfBridge.sendMessage('getSettings');
-
-            // Request LLM providers
-            WpfBridge.sendMessage('getLLMProviders');
-
-            // Request audio devices
-            WpfBridge.sendMessage('getAudioDevices');
+            fetchInitialData();
         }
     }, [isOpen]);
 
+    const fetchInitialData = () => {
+        // Request all needed data
+        WpfBridge.sendMessage('getSettings');
+        WpfBridge.sendMessage('getLLMProviders');
+        WpfBridge.sendMessage('getAudioDevices');
+    };
+
     useEffect(() => {
-        // Listen for settings data
         const settingsUnsubscribe = WpfBridge.on('settingsData', (data: any) => {
+            console.log('Received settings data:', data);
             if (data.settings) {
                 setSettings(data.settings);
             }
         });
 
-        // Listen for LLM providers
         const providersUnsubscribe = WpfBridge.on('llmProvidersData', (data: any) => {
+            console.log('Received LLM providers:', data);
             if (data.providers && Array.isArray(data.providers)) {
                 setProviders(data.providers);
             }
         });
 
-        // Listen for LLM models
         const modelsUnsubscribe = WpfBridge.on('llmModelsData', (data: any) => {
+            console.log('Received LLM models:', data);
+            setIsLoadingModels(false);
             if (data.models && Array.isArray(data.models)) {
                 setModels(data.models);
             }
         });
 
-        // Listen for audio devices
         const audioDevicesUnsubscribe = WpfBridge.on('audioDevicesData', (data: any) => {
+            console.log('Received audio devices:', data);
             if (data.inputDevices && Array.isArray(data.inputDevices)) {
                 setInputDevices(data.inputDevices);
             }
@@ -161,20 +159,28 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
             }
         });
 
-        // Listen for settings save response
         const saveUnsubscribe = WpfBridge.on('settingsSaved', (data: any) => {
+            console.log('Settings saved response:', data);
             setIsSaving(false);
-            setSaveMessage(data.success ? 'Settings saved successfully' : 'Failed to save settings');
+            setSaveMessage(data.success ? 'Settings saved successfully' : data.error || 'Failed to save settings');
 
+            // Clear the message after 3 seconds
             setTimeout(() => {
                 setSaveMessage('');
             }, 3000);
+
+            // If save was successful, refresh any necessary data
+            if (data.success) {
+                // Refresh models if LLM provider changed
+                if (settings.llm.provider !== data.previousProvider) {
+                    WpfBridge.sendMessage('getLLMModels', { provider: settings.llm.provider });
+                }
+            }
         });
 
-        // Listen for LLM connection test results
         const connectionTestUnsubscribe = WpfBridge.on('llmConnectionTested', (data: any) => {
+            console.log('LLM connection test result:', data);
             setConnectionStatus(data.success ? 'success' : 'error');
-
             setTimeout(() => {
                 setConnectionStatus('unknown');
             }, 5000);
@@ -188,15 +194,18 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
             saveUnsubscribe();
             connectionTestUnsubscribe();
         };
-    }, []);
+    }, [settings]);
 
     const handleSaveSettings = () => {
+        console.log('Saving settings:', settings);
         setIsSaving(true);
-        WpfBridge.sendMessage('saveSettings', { settings });
+        WpfBridge.sendMessage('savesettings', { settings });
     };
 
     const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const provider = e.target.value;
+
+        // Update settings
         setSettings(prev => ({
             ...prev,
             llm: {
@@ -205,12 +214,19 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
             }
         }));
 
-        // Request models for this provider
+        // Request models for the new provider
+        setIsLoadingModels(true);
+        setModels([{ id: 'loading', displayName: 'Loading models...' }]);
         WpfBridge.sendMessage('getLLMModels', { provider });
     };
 
     const handleRefreshAudioDevices = () => {
         WpfBridge.sendMessage('refreshAudioDevices');
+    };
+
+    const testConnection = () => {
+        setConnectionStatus('unknown');
+        WpfBridge.sendMessage('testLLMConnection');
     };
 
     const TabIcon = ({ tab }: { tab: SettingsTab }) => {
@@ -244,7 +260,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                     </button>
                 </div>
 
-                {/* Tabs Header */}
+                {/* Tabs */}
                 <div className="border-b px-2 py-1">
                     <div className="grid grid-cols-3 gap-1">
                         {Object.values(SettingsTab).map(tab => (
@@ -264,12 +280,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                     </div>
                 </div>
 
-                {/* Tab Content */}
+                {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6">
                     {activeTab === SettingsTab.LLM && (
                         <div>
                             <h3 className="text-lg font-semibold mb-4">Language Model Settings</h3>
-
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-4">
                                     <div>
@@ -286,7 +301,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             ))}
                                         </select>
                                     </div>
-
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
                                         <select
@@ -299,6 +313,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     model: e.target.value
                                                 }
                                             }))}
+                                            disabled={isLoadingModels}
                                         >
                                             {models.map(model => (
                                                 <option key={model.id} value={model.id}>
@@ -306,8 +321,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                 </option>
                                             ))}
                                         </select>
+                                        {isLoadingModels && (
+                                            <p className="text-xs text-blue-500 mt-1">Loading models...</p>
+                                        )}
                                     </div>
-
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
                                         <input
@@ -328,7 +345,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                         </p>
                                     </div>
                                 </div>
-
                                 <div className="space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
@@ -346,7 +362,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             placeholder="Not required for local models"
                                         />
                                     </div>
-
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Temperature: {settings.llm.temperature.toFixed(1)}
@@ -371,7 +386,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             <span>More Creative</span>
                                         </div>
                                     </div>
-
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Max Tokens: {settings.llm.maxTokens}
@@ -396,14 +410,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             <span>Longer</span>
                                         </div>
                                     </div>
-
                                     <div>
                                         <button
                                             className={`text-sm px-3 py-1 rounded flex items-center 
-                        ${connectionStatus === 'unknown' ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' :
+                                            ${connectionStatus === 'unknown' ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' :
                                                 connectionStatus === 'success' ? 'bg-green-100 text-green-600' :
                                                     'bg-red-100 text-red-600'}`}
-                                            onClick={() => WpfBridge.sendMessage('testLLMConnection')}
+                                            onClick={testConnection}
                                         >
                                             Test Connection
                                             <ChevronRight size={14} className="ml-1" />
@@ -423,7 +436,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                     {activeTab === SettingsTab.Voice && (
                         <div>
                             <h3 className="text-lg font-semibold mb-4">Voice Settings</h3>
-
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
@@ -448,13 +460,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     settings.voice.inputEnabled ? 'bg-blue-500' : 'bg-gray-300'
                                                 }`}
                                             >
-                        <span className={`absolute block w-4 h-4 rounded-full bg-white border-2 transform transition-transform duration-200 ease-in ${
-                            settings.voice.inputEnabled ? 'translate-x-5 border-blue-500' : 'translate-x-0 border-gray-300'
-                        }`}></span>
+                                                <span className={`absolute block w-4 h-4 rounded-full bg-white border-2 transform transition-transform duration-200 ease-in ${
+                                                    settings.voice.inputEnabled ? 'translate-x-5 border-blue-500' : 'translate-x-0 border-gray-300'
+                                                }`}></span>
                                             </label>
                                         </div>
                                     </div>
-
                                     {settings.voice.inputEnabled && (
                                         <>
                                             <div>
@@ -473,7 +484,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     placeholder="Hey Juno"
                                                 />
                                             </div>
-
                                             <div>
                                                 <div className="flex justify-between items-center mb-1">
                                                     <label className="block text-sm font-medium text-gray-700">Input Device</label>
@@ -506,7 +516,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                         </>
                                     )}
                                 </div>
-
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <label className="text-sm font-medium text-gray-700">Enable Voice Output</label>
@@ -530,13 +539,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     settings.voice.outputEnabled ? 'bg-blue-500' : 'bg-gray-300'
                                                 }`}
                                             >
-                        <span className={`absolute block w-4 h-4 rounded-full bg-white border-2 transform transition-transform duration-200 ease-in ${
-                            settings.voice.outputEnabled ? 'translate-x-5 border-blue-500' : 'translate-x-0 border-gray-300'
-                        }`}></span>
+                                                <span className={`absolute block w-4 h-4 rounded-full bg-white border-2 transform transition-transform duration-200 ease-in ${
+                                                    settings.voice.outputEnabled ? 'translate-x-5 border-blue-500' : 'translate-x-0 border-gray-300'
+                                                }`}></span>
                                             </label>
                                         </div>
                                     </div>
-
                                     {settings.voice.outputEnabled && (
                                         <>
                                             <div>
@@ -556,7 +564,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     <option value="elevenlabs">ElevenLabs</option>
                                                 </select>
                                             </div>
-
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">Voice</label>
                                                 <select
@@ -575,7 +582,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     <option value="female1">Female 1</option>
                                                 </select>
                                             </div>
-
                                             <div>
                                                 <div className="flex justify-between items-center mb-1">
                                                     <label className="block text-sm font-medium text-gray-700">Output Device</label>
@@ -605,7 +611,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     ))}
                                                 </select>
                                             </div>
-
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                                     Speed: {settings.voice.speed.toFixed(1)}x
@@ -630,7 +635,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     <span>Faster</span>
                                                 </div>
                                             </div>
-
                                             <div>
                                                 <button
                                                     className="px-3 py-1 text-sm bg-blue-100 text-blue-600 rounded hover:bg-blue-200 flex items-center"
@@ -650,19 +654,16 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                     {activeTab === SettingsTab.Privacy && (
                         <div>
                             <h3 className="text-lg font-semibold mb-4">Privacy Settings</h3>
-
                             <div className="space-y-6">
                                 <p className="text-sm text-gray-600">
                                     Control what data Juno can access and how your information is stored.
                                 </p>
-
                                 <div className="border rounded-md p-4">
                                     <h4 className="font-medium">Local Processing</h4>
                                     <p className="text-sm text-gray-600 mt-1">
                                         Using LM Studio, all processing happens locally on your device. No data is sent to external servers.
                                     </p>
                                 </div>
-
                                 <div className="space-y-3">
                                     <button
                                         className="w-full text-left px-4 py-3 text-sm border rounded hover:bg-gray-50 flex items-center justify-between"
@@ -671,7 +672,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                         <span>Manage Tool Permissions</span>
                                         <ChevronRight size={16} />
                                     </button>
-
                                     <button
                                         className="w-full text-left px-4 py-3 text-sm border rounded hover:bg-gray-50 flex items-center justify-between"
                                         onClick={() => WpfBridge.sendMessage('clearConversationHistory')}
@@ -687,12 +687,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                     {activeTab === SettingsTab.Tools && (
                         <div>
                             <h3 className="text-lg font-semibold mb-4">Tools Settings</h3>
-
                             <div className="space-y-6">
                                 <p className="text-sm text-gray-600">
                                     Manage tools that extend Juno's capabilities.
                                 </p>
-
                                 <div className="space-y-3">
                                     <button
                                         className="w-full text-left px-4 py-3 text-sm border rounded hover:bg-gray-50 flex items-center justify-between"
@@ -701,7 +699,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                         <span>Manage Tools</span>
                                         <ChevronRight size={16} />
                                     </button>
-
                                     <button
                                         className="w-full text-left px-4 py-3 text-sm border rounded hover:bg-gray-50 flex items-center justify-between"
                                         onClick={() => WpfBridge.sendMessage('toolDevelopmentEnvironment')}
@@ -717,28 +714,27 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                     {activeTab === SettingsTab.About && (
                         <div>
                             <h3 className="text-lg font-semibold mb-4">About Juno AI Assistant</h3>
-
                             <div className="space-y-4 text-center max-w-md mx-auto">
                                 <div className="flex justify-center mb-6">
                                     <div className="w-24 h-24 rounded-full bg-blue-100 flex items-center justify-center">
                                         <span className="text-3xl font-bold text-blue-500">J</span>
                                     </div>
                                 </div>
-
                                 <div>
                                     <h2 className="text-xl font-bold">Juno AI Assistant</h2>
                                     <p className="text-sm text-gray-600">Version 1.0.0</p>
                                 </div>
-
                                 <div className="text-sm text-gray-600">
                                     <p>A modular, extensible AI assistant with personality switching capabilities and a flexible tool system.</p>
                                 </div>
-
                                 <div>
                                     <a
                                         href="#"
                                         className="text-sm text-blue-500 hover:underline"
-                                        onClick={() => WpfBridge.sendMessage('openDocumentation')}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            WpfBridge.sendMessage('openDocumentation');
+                                        }}
                                     >
                                         Documentation
                                     </a>
@@ -754,18 +750,20 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                         <span className={`text-sm ${
                             saveMessage.includes('success') ? 'text-green-600' : 'text-red-600'
                         }`}>
-              {saveMessage}
-            </span>
+                            {saveMessage}
+                        </span>
                     )}
                     {!saveMessage && <span></span>}
-
                     <button
                         className="px-4 py-2 bg-blue-500 text-white rounded flex items-center disabled:bg-blue-300"
                         onClick={handleSaveSettings}
                         disabled={isSaving}
                     >
                         {isSaving ? (
-                            <span>Saving...</span>
+                            <span className="flex items-center">
+                                <RefreshCw size={16} className="mr-2 animate-spin" />
+                                Saving...
+                            </span>
                         ) : (
                             <>
                                 <Save size={16} className="mr-2" />

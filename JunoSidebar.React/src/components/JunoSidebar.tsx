@@ -1,10 +1,12 @@
-// File: JunoSidebar/JunoSidebar.React/src/components/JunoSidebar.tsx
+// File: JunoSidebar.React\src\components\JunoSidebar.tsx
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { ChevronRight, ChevronLeft, Calendar, Mail, FileText, Database, BarChart2, Settings, CheckCircle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Calendar, Mail, FileText, Database, BarChart2, Settings, CheckCircle, Hammer } from 'lucide-react';
 import WpfBridge from '../bridge/WpfBridge';
 import PersonalitySelector from './PersonalitySelector';
 import VoiceControls from './VoiceControls';
 import SettingsPanel from './SettingsPanel';
+import ManageToolsPanel from './ManageToolsPanel';
 
 const JunoSidebar: React.FC = () => {
     const [activeState, setActiveState] = useState<'idle' | 'listening' | 'processing' | 'responding'>('idle');
@@ -13,6 +15,7 @@ const JunoSidebar: React.FC = () => {
     const [currentResponse, setCurrentResponse] = useState('');
     const [showNotification, setShowNotification] = useState(false);
     const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
+    const [manageToolsPanelOpen, setManageToolsPanelOpen] = useState(false);
 
     const handleToggleExpanded = useCallback(() => {
         const newExpandedState = !expanded;
@@ -46,13 +49,18 @@ const JunoSidebar: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        // Listen for query and response updates
+        const unsubscribe = WpfBridge.on('showManageTools', () => {
+            setManageToolsPanelOpen(true);
+        });
+        return unsubscribe;
+    }, []);
+
+    useEffect(() => {
         const queryUnsubscribe = WpfBridge.on('queryUpdate', (data: any) => {
             if (data && data.query) {
                 setCurrentQuery(data.query);
             }
         });
-
         const responseUnsubscribe = WpfBridge.on('responseUpdate', (data: any) => {
             if (data) {
                 if (data.response !== undefined) {
@@ -63,7 +71,6 @@ const JunoSidebar: React.FC = () => {
                 }
             }
         });
-
         return () => {
             queryUnsubscribe();
             responseUnsubscribe();
@@ -103,6 +110,10 @@ const JunoSidebar: React.FC = () => {
         { time: '4:30 PM', title: 'Client Call: Acme Inc.', duration: '45m' },
     ];
 
+    const handleOpenManageTools = () => {
+        setManageToolsPanelOpen(true);
+    };
+
     return (
         <div className="h-screen flex">
             <div className={`bg-white border-l shadow-lg transition-all duration-300 ease-in-out flex flex-col h-full ${
@@ -133,14 +144,13 @@ const JunoSidebar: React.FC = () => {
                 {/* Personality Selector */}
                 <PersonalitySelector expanded={expanded} />
 
-                {/* Voice Controls & Current Conversation */}
+                {/* Voice Controls */}
                 <div className={`border-b ${expanded ? '' : 'py-4 px-2'}`}>
                     <VoiceControls
                         expanded={expanded}
                         activeState={activeState}
                         onStateChange={setActiveState}
                     />
-
                     {expanded && (
                         <div className="px-4 pb-4">
                             {currentQuery && (
@@ -170,7 +180,15 @@ const JunoSidebar: React.FC = () => {
                 {/* Quick Tools */}
                 {expanded ? (
                     <div className="p-4 border-b">
-                        <h3 className="text-xs font-semibold text-gray-500 mb-3">QUICK TOOLS</h3>
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="text-xs font-semibold text-gray-500">QUICK TOOLS</h3>
+                            <button
+                                className="text-xs text-blue-500 flex items-center"
+                                onClick={handleOpenManageTools}
+                            >
+                                Manage Tools
+                            </button>
+                        </div>
                         <div className="grid grid-cols-3 gap-2">
                             {tools.map((tool, index) => (
                                 <button
@@ -196,6 +214,13 @@ const JunoSidebar: React.FC = () => {
                                 {tool.icon}
                             </button>
                         ))}
+                        <button
+                            className="p-2 rounded-full hover:bg-gray-100 text-blue-500"
+                            title="Manage Tools"
+                            onClick={handleOpenManageTools}
+                        >
+                            <Hammer size={16} />
+                        </button>
                     </div>
                 )}
 
@@ -289,6 +314,12 @@ const JunoSidebar: React.FC = () => {
             <SettingsPanel
                 isOpen={settingsPanelOpen}
                 onClose={() => setSettingsPanelOpen(false)}
+            />
+
+            {/* Manage Tools Panel */}
+            <ManageToolsPanel
+                isOpen={manageToolsPanelOpen}
+                onClose={() => setManageToolsPanelOpen(false)}
             />
         </div>
     );

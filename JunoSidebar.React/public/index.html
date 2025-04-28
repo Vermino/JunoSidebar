@@ -13,7 +13,6 @@
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>Juno Sidebar</title>
-
     <!-- Import Tailwind CSS - This will be replaced with a proper build in production -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -33,20 +32,14 @@
             }
         }
     </script>
-
     <!-- WebView2 communication script - ensures communication works even before React loads -->
     <script>
-        // Setup temporary message handler before React loads
         window.addEventListener('message', function(event) {
             console.log('Message received before React initialization:', event.data);
         });
-
-        // Function to check if running in WebView2
         function isRunningInWebView2() {
             return 'chrome' in window && 'webview' in window.chrome;
         }
-
-        // Log initialization
         console.log('Juno Sidebar initializing. Running in WebView2:', isRunningInWebView2());
     </script>
 </head>

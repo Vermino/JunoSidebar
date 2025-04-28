@@ -1,0 +1,3 @@
+@echo off
+echo Starting Juno AI Assistant...
+start "" "JunoSidebar.Wpf.exe"

@@ -1,4 +1,4 @@
-﻿<!-- File: JunoSidebar.Wpf/JunoSidebar.Wpf.csproj -->
+﻿<!-- File: JunoSidebar.Wpf\JunoSidebar.Wpf.csproj -->
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
@@ -6,6 +6,9 @@
         <UseWPF>true</UseWPF>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <Version>1.0.0</Version>
+        <Authors>Juno Development Team</Authors>
+        <Description>A modular, extensible AI assistant for Windows</Description>
     </PropertyGroup>
 
     <ItemGroup>
@@ -16,9 +19,26 @@
         <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
 
+    <!-- Development-mode resources: copied to output directory -->
     <ItemGroup>
-        <None Update="wwwroot\**\*.*">
+        <None Include="wwwroot\**\*.*">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
+
+    <!-- Embedded resources for release mode -->
+    <ItemGroup Condition="'$(Configuration)'=='Release'">
+        <EmbeddedResource Include="wwwroot\**\*.*" />
+    </ItemGroup>
+
+    <!-- Create wwwroot directory if it doesn't exist -->
+    <Target Name="EnsureWwwrootDirectory" BeforeTargets="PreBuildEvent">
+        <MakeDir Directories="$(ProjectDir)wwwroot" Condition="!Exists('$(ProjectDir)wwwroot')" />
+    </Target>
+
+    <!-- Use BuildAndPackage.ps1 script for Release build 
+        <Target Name="BuildReactUI" BeforeTargets="BeforeBuild" Condition="'$(Configuration)'=='Release'">
+            <Exec Command="powershell -ExecutionPolicy Bypass -File $(SolutionDir)BuildAndPackage.ps1 -Configuration $(Configuration)" />
+        </Target>
+        -->
 </Project>
