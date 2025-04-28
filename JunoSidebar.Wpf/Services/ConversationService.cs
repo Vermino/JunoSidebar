@@ -74,6 +74,7 @@ namespace JunoSidebar.Wpf.Services
             _voiceService.WakeWordDetected += OnWakeWordDetected;
             _voiceService.SpeechRecognized += OnSpeechRecognized;
         }
+        
 
         /// <summary>
         /// Processes a user query and generates a response.
@@ -198,6 +199,8 @@ namespace JunoSidebar.Wpf.Services
                 _currentConversationCts = null;
             }
         }
+        
+        
 
         /// <summary>
         /// Cancels the current conversation.
@@ -274,13 +277,23 @@ namespace JunoSidebar.Wpf.Services
 
         // Private helper methods
 
-        private void SetAssistantState(AssistantState newState)
+        /// <summary>
+        /// Sets the current state of the assistant.
+        /// </summary>
+        /// <param name="newState">The new state to set.</param>
+        public void SetCurrentState(AssistantState newState)
         {
             if (CurrentState == newState)
                 return;
             
             CurrentState = newState;
             AssistantStateChanged?.Invoke(this, new AssistantStateChangedEventArgs(newState));
+        }
+        
+        // Private helper method for internal state changes
+        private void SetAssistantState(AssistantState newState)
+        {
+            SetCurrentState(newState);
         }
 
         private async Task ProcessToolCallsAsync(string response, CancellationToken cancellationToken)

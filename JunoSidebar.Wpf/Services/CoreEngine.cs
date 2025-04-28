@@ -142,6 +142,16 @@ namespace JunoSidebar.Wpf.Services
                     case "stopresponding":
                         _conversationService.CancelCurrentConversation();
                         break;
+                        
+                    case "setassistantstate":
+                        if (messageObj.TryGetProperty("state", out string? state) && state != null)
+                        {
+                            if (Enum.TryParse<AssistantState>(state, true, out var assistantState))
+                            {
+                                _conversationService.SetCurrentState(assistantState);
+                            }
+                        }
+                        break;
                     
                     case "submitquery":
                         if (messageObj.TryGetProperty("query", out string? query) && query != null)
@@ -182,6 +192,29 @@ namespace JunoSidebar.Wpf.Services
                     
                     case "testvoice":
                         Task.Run(() => _voiceService.TestVoiceAsync());
+                        break;
+                        
+                    case "getaudiodevices":
+                        HandleGetAudioDevices();
+                        break;
+                        
+                    case "refreshaudiodevices":
+                        _voiceService.RefreshAudioDevices();
+                        HandleGetAudioDevices();
+                        break;
+                        
+                    case "setinputdevice":
+                        if (messageObj.TryGetProperty("index", out int? inputDeviceIndex) && inputDeviceIndex.HasValue)
+                        {
+                            _voiceService.SetInputDevice(inputDeviceIndex.Value);
+                        }
+                        break;
+                        
+                    case "setoutputdevice":
+                        if (messageObj.TryGetProperty("index", out int? outputDeviceIndex) && outputDeviceIndex.HasValue)
+                        {
+                            _voiceService.SetOutputDevice(outputDeviceIndex.Value);
+                        }
                         break;
                     
                     case "getsettings":
@@ -258,6 +291,38 @@ namespace JunoSidebar.Wpf.Services
         private void HandleGetVoiceSettings()
         {
             SendMessageToUI("voiceSettings", _voiceService.GetVoiceSettings());
+        }
+        
+        private void HandleGetAudioDevices()
+        {
+            try
+            {
+                var inputDevices = _voiceService.GetInputDevices();
+                var outputDevices = _voiceService.GetOutputDevices();
+                
+                Console.WriteLine($"Sending audio devices to UI: {inputDevices.Count} input devices, {outputDevices.Count} output devices");
+                foreach (var device in inputDevices)
+                {
+                    Console.WriteLine($"Input device: {device.Name} (Index: {device.Index})");
+                }
+                
+                SendMessageToUI("audioDevicesData", new
+                {
+                    inputDevices,
+                    outputDevices
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting audio devices: {ex.Message}");
+                
+                // Send at least the default device as fallback
+                SendMessageToUI("audioDevicesData", new
+                {
+                    inputDevices = new[] { new { index = -1, name = "Default Device" } },
+                    outputDevices = new[] { new { index = -1, name = "Default Device" } }
+                });
+            }
         }
 
         private void HandleGetSettings()

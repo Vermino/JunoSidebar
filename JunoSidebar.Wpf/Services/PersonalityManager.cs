@@ -1,4 +1,5 @@
 // File: JunoSidebar/JunoSidebar.Wpf/Services/PersonalityManager.cs
+
 using JunoSidebar.Wpf.Models;
 using System;
 using System.Collections.Generic;
@@ -320,7 +321,8 @@ namespace JunoSidebar.Wpf.Services
 
             // Load the last active personality ID from settings
             string activePersonalityId = await LoadCurrentPersonalityIdAsync();
-            if (!string.IsNullOrEmpty(activePersonalityId) && _personalities.TryGetValue(activePersonalityId, out var activePersonality))
+            if (!string.IsNullOrEmpty(activePersonalityId) &&
+                _personalities.TryGetValue(activePersonalityId, out var activePersonality))
             {
                 CurrentPersonality = activePersonality;
             }
@@ -347,8 +349,9 @@ namespace JunoSidebar.Wpf.Services
             {
                 Name = "General Assistant",
                 Id = "general-assistant",
-                SystemPrompt = "You are Juno, a helpful AI assistant. You are designed to be friendly, informative, and concise. " +
-                               "You can help with a wide range of tasks, from answering questions to providing suggestions and assistance with planning.",
+                SystemPrompt =
+                    "You are Juno, a helpful AI assistant. You are designed to be friendly, informative, and concise. " +
+                    "You can help with a wide range of tasks, from answering questions to providing suggestions and assistance with planning.",
                 Description = "A versatile AI assistant for general tasks and queries.",
                 Avatar = "assistant",
                 BuiltIn = true,
@@ -372,9 +375,10 @@ namespace JunoSidebar.Wpf.Services
             {
                 Name = "Chef Juno",
                 Id = "chef",
-                SystemPrompt = "You are Chef Juno, a culinary expert who helps with meal planning, recipes, and cooking advice. " +
-                               "You use cooking terminology and have a warm, encouraging tone. You're knowledgeable about ingredients, " +
-                               "techniques, and can help adapt recipes for dietary restrictions.",
+                SystemPrompt =
+                    "You are Chef Juno, a culinary expert who helps with meal planning, recipes, and cooking advice. " +
+                    "You use cooking terminology and have a warm, encouraging tone. You're knowledgeable about ingredients, " +
+                    "techniques, and can help adapt recipes for dietary restrictions.",
                 Description = "A culinary expert for recipes, meal planning, and cooking advice.",
                 Avatar = "chef",
                 BuiltIn = true,
@@ -398,9 +402,10 @@ namespace JunoSidebar.Wpf.Services
             {
                 Name = "Research Assistant",
                 Id = "researcher",
-                SystemPrompt = "You are Juno, a research assistant specializing in gathering, analyzing, and summarizing information. " +
-                               "You're precise, methodical, and focused on providing well-cited, factual information. " +
-                               "You can help with literature reviews, data analysis, and presenting complex information clearly.",
+                SystemPrompt =
+                    "You are Juno, a research assistant specializing in gathering, analyzing, and summarizing information. " +
+                    "You're precise, methodical, and focused on providing well-cited, factual information. " +
+                    "You can help with literature reviews, data analysis, and presenting complex information clearly.",
                 Description = "A scholarly assistant for research, analysis, and factual information.",
                 Avatar = "researcher",
                 BuiltIn = true,
@@ -505,6 +510,7 @@ namespace JunoSidebar.Wpf.Services
             {
                 return element.GetString() ?? string.Empty;
             }
+
             return string.Empty;
         }
 
@@ -524,7 +530,8 @@ namespace JunoSidebar.Wpf.Services
             {
                 string json = await File.ReadAllTextAsync(settingsPath);
                 var settings = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
-                return settings?.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value) ?? new Dictionary<string, object>();
+                return settings?.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value) ??
+                       new Dictionary<string, object>();
             }
             catch (Exception)
             {
