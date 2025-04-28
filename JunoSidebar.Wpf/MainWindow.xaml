@@ -1,0 +1,44 @@
+﻿<Window x:Class="JunoSidebar.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Juno Sidebar" 
+        Height="900" 
+        Width="80" 
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        SizeToContent="Manual"
+        WindowStartupLocation="Manual">
+    
+    <Grid x:Name="MainGrid">
+        <Grid.ContextMenu>
+            <ContextMenu x:Name="SidebarContextMenu">
+                <MenuItem Header="Always on Top" IsCheckable="True" IsChecked="True" Click="AlwaysOnTopMenuItem_Click"/>
+                <MenuItem Header="Settings" Click="SettingsMenuItem_Click"/>
+                <Separator/>
+                <MenuItem Header="Exit" Click="ExitMenuItem_Click"/>
+            </ContextMenu>
+        </Grid.ContextMenu>
+        
+        <Border x:Name="MainBorder" 
+                Background="White" 
+                BorderBrush="#E5E7EB" 
+                BorderThickness="0,0,1,0"
+                CornerRadius="0">
+            <wv2:WebView2 x:Name="WebView" />
+        </Border>
+        
+        <Rectangle x:Name="DragHandle" 
+                   Width="5" 
+                   HorizontalAlignment="Left" 
+                   Fill="Transparent"
+                   Cursor="SizeWE"
+                   MouseDown="DragHandle_MouseDown"
+                   MouseMove="DragHandle_MouseMove"
+                   MouseUp="DragHandle_MouseUp" />
+    </Grid>
+</Window>
