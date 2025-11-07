@@ -17,6 +17,24 @@
         <PackageReference Include="System.Speech" Version="9.0.4" />
         <PackageReference Include="System.Text.Json" Version="7.0.2" />
         <PackageReference Include="YamlDotNet" Version="16.3.0" />
+
+        <!-- LLM Providers -->
+        <PackageReference Include="Anthropic.SDK" Version="0.2.2" />
+        <PackageReference Include="Betalgo.OpenAI" Version="8.10.1" />
+
+        <!-- Speech -->
+        <PackageReference Include="Whisper.net" Version="1.7.4" />
+        <PackageReference Include="Whisper.net.Runtime" Version="1.7.4" />
+
+        <!-- Tools -->
+        <PackageReference Include="HtmlAgilityPack" Version="1.11.71" />
+        <PackageReference Include="AngleSharp" Version="1.1.2" />
+
+        <!-- Utilities -->
+        <PackageReference Include="Polly" Version="8.4.2" />
+        <PackageReference Include="Serilog" Version="4.1.0" />
+        <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+        <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
     </ItemGroup>
 
     <!-- Development-mode resources: copied to output directory -->
