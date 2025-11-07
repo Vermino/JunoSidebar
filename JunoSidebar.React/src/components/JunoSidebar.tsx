@@ -273,7 +273,13 @@ const JunoSidebar: React.FC = () => {
                         <button
                             className="p-2 rounded-full hover:bg-gray-100 text-gray-500 mx-auto block"
                             title="Settings"
-                            onClick={() => setSettingsPanelOpen(true)}
+                            onClick={() => {
+                                if (!expanded) {
+                                    setExpanded(true);
+                                    WpfBridge.setExpanded(true);
+                                }
+                                setSettingsPanelOpen(true);
+                            }}
                         >
                             <Settings size={16} />
                         </button>
