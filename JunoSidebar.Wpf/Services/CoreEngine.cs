@@ -277,6 +277,7 @@ namespace JunoSidebar.Wpf.Services
                         
                     default:
                         Debug.WriteLine($"CoreEngine: Unknown action received: {messageObj.Action}");
+                        DebugLogger.Instance.Log($"Unknown action received: {action}", "System", LogLevel.Warning);
                         break;
                 }
             }
