@@ -379,11 +379,17 @@ namespace JunoSidebar.Wpf.Services
                     Debug.WriteLine($"CoreEngine: Input device: {device.Name} (Index: {device.Index})");
                 }
 
-                SendMessageToUI("audioDevicesData", new
+                var message = new
                 {
                     inputDevices,
                     outputDevices
-                });
+                };
+
+                // Log the serialized JSON for debugging
+                string debugJson = JsonSerializer.Serialize(message, _jsonOptions);
+                DebugLogger.Instance.LogVoice($"Audio devices JSON: {debugJson}");
+
+                SendMessageToUI("audioDevicesData", message);
 
                 DebugLogger.Instance.LogVoice("Audio devices data sent to UI");
             }

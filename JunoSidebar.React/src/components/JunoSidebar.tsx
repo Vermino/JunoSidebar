@@ -23,6 +23,15 @@ const JunoSidebar: React.FC = () => {
         WpfBridge.setExpanded(newExpandedState);
     }, [expanded]);
 
+    const handleOpenSettings = useCallback(() => {
+        // If collapsed, expand first
+        if (!expanded) {
+            setExpanded(true);
+            WpfBridge.setExpanded(true);
+        }
+        setSettingsPanelOpen(true);
+    }, [expanded]);
+
     useEffect(() => {
         const unsubscribe = WpfBridge.on('setExpanded', (data: any) => {
             if (data && typeof data.expanded === 'boolean') {
@@ -262,7 +271,7 @@ const JunoSidebar: React.FC = () => {
                         <div className="flex justify-between">
                             <button
                                 className="p-2 rounded hover:bg-gray-100 text-gray-500"
-                                onClick={() => setSettingsPanelOpen(true)}
+                                onClick={handleOpenSettings}
                             >
                                 <Settings size={18} />
                             </button>
@@ -273,7 +282,7 @@ const JunoSidebar: React.FC = () => {
                         <button
                             className="p-2 rounded-full hover:bg-gray-100 text-gray-500 mx-auto block"
                             title="Settings"
-                            onClick={() => setSettingsPanelOpen(true)}
+                            onClick={handleOpenSettings}
                         >
                             <Settings size={16} />
                         </button>
