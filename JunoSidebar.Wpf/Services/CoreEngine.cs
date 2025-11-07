@@ -119,7 +119,8 @@ namespace JunoSidebar.Wpf.Services
         {
             try
             {
-                string message = e.WebMessageAsJson;
+                // Use WebMessageAsString instead of WebMessageAsJson to avoid double-encoding
+                string message = e.TryGetWebMessageAsString();
                 Debug.WriteLine($"CoreEngine: Received message from UI: {message}");
 
                 // Log raw message to Debug Console for troubleshooting
