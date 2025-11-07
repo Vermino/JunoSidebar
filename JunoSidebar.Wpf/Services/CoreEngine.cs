@@ -122,6 +122,9 @@ namespace JunoSidebar.Wpf.Services
                 string message = e.WebMessageAsJson;
                 Debug.WriteLine($"CoreEngine: Received message from UI: {message}");
 
+                // Log raw message to Debug Console for troubleshooting
+                DebugLogger.Instance.Log($"RAW MESSAGE: {message}", "System", LogLevel.Debug);
+
                 var messageObj = JsonSerializer.Deserialize<WebMessage>(message, _jsonOptions);
                 if (messageObj == null || string.IsNullOrEmpty(messageObj.Action))
                 {
