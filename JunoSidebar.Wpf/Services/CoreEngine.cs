@@ -215,10 +215,12 @@ namespace JunoSidebar.Wpf.Services
                         break;
                         
                     case "getaudiodevices":
+                        DebugLogger.Instance.LogVoice("Received request for audio devices");
                         HandleGetAudioDevices();
                         break;
-                        
+
                     case "refreshaudiodevices":
+                        DebugLogger.Instance.LogVoice("Refreshing audio devices");
                         _voiceService.RefreshAudioDevices();
                         HandleGetAudioDevices();
                         break;
@@ -367,24 +369,29 @@ namespace JunoSidebar.Wpf.Services
             {
                 var inputDevices = _voiceService.GetInputDevices();
                 var outputDevices = _voiceService.GetOutputDevices();
-                
+
+                DebugLogger.Instance.LogVoice($"Sending {inputDevices.Count} input and {outputDevices.Count} output devices to UI");
                 Debug.WriteLine($"CoreEngine: Sending audio devices to UI: {inputDevices.Count} input devices, {outputDevices.Count} output devices");
-                
+
                 foreach (var device in inputDevices)
                 {
+                    DebugLogger.Instance.LogVoice($"  Input: {device.Name} (Index: {device.Index})");
                     Debug.WriteLine($"CoreEngine: Input device: {device.Name} (Index: {device.Index})");
                 }
-                
+
                 SendMessageToUI("audioDevicesData", new
                 {
                     inputDevices,
                     outputDevices
                 });
+
+                DebugLogger.Instance.LogVoice("Audio devices data sent to UI");
             }
             catch (Exception ex)
             {
+                DebugLogger.Instance.LogError($"Error getting audio devices: {ex.Message}", "Voice");
                 Debug.WriteLine($"CoreEngine: Error getting audio devices: {ex.Message}");
-                
+
                 SendMessageToUI("audioDevicesData", new
                 {
                     inputDevices = new[] { new { index = -1, name = "Default Device" } },
