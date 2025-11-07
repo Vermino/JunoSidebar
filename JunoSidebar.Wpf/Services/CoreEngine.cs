@@ -131,7 +131,7 @@ namespace JunoSidebar.Wpf.Services
                 }
 
                 string action = messageObj.Action.ToLowerInvariant();
-                DebugLogger.Instance.Log($"Received UI message: {action}", "System", DebugLogger.LogLevel.Info);
+                DebugLogger.Instance.Log($"Received UI message: {action}", "System", LogLevel.Info);
 
                 switch (action)
                 {
