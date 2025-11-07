@@ -898,8 +898,8 @@ namespace JunoSidebar.Wpf.Services
                 
                 // Serialize the message and send it
                 string json = JsonSerializer.Serialize(messageObject, _jsonOptions);
-                _webView.PostWebMessageAsJson(json);
-                
+                _webView.CoreWebView2.PostWebMessageAsString(json);
+
                 // Log only the action to avoid filling the log with large payloads
                 Debug.WriteLine($"CoreEngine: Sent message to UI: {action}");
             }
