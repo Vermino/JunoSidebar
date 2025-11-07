@@ -794,4 +794,31 @@ namespace JunoSidebar.Wpf.Services.Voice
             };
         }
     }
+
+    public class VoiceInfo
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Gender { get; set; } = string.Empty;
+        public string Age { get; set; } = string.Empty;
+        public string Culture { get; set; } = string.Empty;
+    }
+
+    public class AudioDevice
+    {
+        public int Index { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class SpeechRecognizedEventArgs : EventArgs
+    {
+        public string Text { get; }
+        public float Confidence { get; }
+
+        public SpeechRecognizedEventArgs(string text, float confidence)
+        {
+            Text = text;
+            Confidence = confidence;
+        }
+    }
 }
