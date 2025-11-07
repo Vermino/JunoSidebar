@@ -16,7 +16,7 @@ namespace JunoSidebar.Wpf.Services.Voice
     public class WhisperProcessor : IVoiceProcessor, IDisposable
     {
         private WhisperFactory? _factory;
-        private WhisperProcessor? _processor;
+        private Whisper.net.WhisperProcessor? _whisperProcessor;
         private readonly string _modelPath;
         private readonly string _modelsDirectory;
         private bool _isInitialized = false;
@@ -59,11 +59,9 @@ namespace JunoSidebar.Wpf.Services.Voice
                 // Create processor builder with optimal settings
                 var builder = _factory.CreateBuilder()
                     .WithLanguage("en")
-                    .WithThreads(Environment.ProcessorCount)
-                    .WithSingleSegment(false)
-                    .WithTokenTimestamps(false);
+                    .WithThreads(Environment.ProcessorCount);
 
-                _processor = builder.Build();
+                _whisperProcessor = builder.Build();
                 _isInitialized = true;
 
                 Debug.WriteLine("Whisper processor initialized successfully");
@@ -78,7 +76,7 @@ namespace JunoSidebar.Wpf.Services.Voice
 
         public async Task<TranscriptionResult> TranscribeAsync(byte[] audioData, CancellationToken cancellationToken = default)
         {
-            if (!_isInitialized || _processor == null)
+            if (!_isInitialized || _whisperProcessor == null)
             {
                 return new TranscriptionResult
                 {
@@ -97,7 +95,7 @@ namespace JunoSidebar.Wpf.Services.Voice
                 // Process with Whisper
                 var segments = new System.Collections.Generic.List<string>();
 
-                await foreach (var segment in _processor.ProcessAsync(samples, cancellationToken))
+                await foreach (var segment in _whisperProcessor.ProcessAsync(samples, cancellationToken))
                 {
                     segments.Add(segment.Text);
                 }
@@ -128,7 +126,7 @@ namespace JunoSidebar.Wpf.Services.Voice
 
         public async Task<TranscriptionResult> TranscribeFileAsync(string filePath, CancellationToken cancellationToken = default)
         {
-            if (!_isInitialized || _processor == null)
+            if (!_isInitialized || _whisperProcessor == null)
             {
                 return new TranscriptionResult
                 {
@@ -155,7 +153,7 @@ namespace JunoSidebar.Wpf.Services.Voice
 
                 var segments = new System.Collections.Generic.List<string>();
 
-                await foreach (var segment in _processor.ProcessAsync(fileStream, cancellationToken))
+                await foreach (var segment in _whisperProcessor.ProcessAsync(fileStream, cancellationToken))
                 {
                     segments.Add(segment.Text);
                 }
@@ -203,7 +201,7 @@ namespace JunoSidebar.Wpf.Services.Voice
 
             try
             {
-                await foreach (var segment in _processor!.ProcessAsync(testSamples, cancellationToken))
+                await foreach (var segment in _whisperProcessor!.ProcessAsync(testSamples, cancellationToken))
                 {
                     // If we can process without error, the processor is working
                     break;
@@ -268,7 +266,7 @@ namespace JunoSidebar.Wpf.Services.Voice
 
         public void Dispose()
         {
-            _processor?.Dispose();
+            _whisperProcessor?.Dispose();
             _factory?.Dispose();
             _isInitialized = false;
         }

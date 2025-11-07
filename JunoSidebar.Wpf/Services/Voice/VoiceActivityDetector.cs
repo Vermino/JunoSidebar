@@ -172,7 +172,7 @@ namespace JunoSidebar.Wpf.Services.Voice
         /// <summary>
         /// Automatically calibrate threshold based on background noise
         /// </summary>
-        public float CalibrateThreshold(short[][] noisesamples)
+        public float CalibrateThreshold(short[][] noiseSamples)
         {
             var energies = new List<float>();
 

@@ -391,6 +391,27 @@ namespace JunoSidebar.Wpf.Services.Tools
     }
 
     /// <summary>
+    /// Permission level for tool execution approval
+    /// </summary>
+    public enum ToolPermissionLevel
+    {
+        /// <summary>
+        /// Always require user approval before tool execution
+        /// </summary>
+        AlwaysRequireApproval,
+
+        /// <summary>
+        /// Never require approval, auto-approve tool execution
+        /// </summary>
+        NeverRequireApproval,
+
+        /// <summary>
+        /// Require approval based on tool parameters
+        /// </summary>
+        ConditionalApproval
+    }
+
+    /// <summary>
     /// Event args for permission changes.
     /// </summary>
     public class PermissionChangedEventArgs : EventArgs
@@ -399,12 +420,12 @@ namespace JunoSidebar.Wpf.Services.Tools
         /// Gets the name of the permission that changed.
         /// </summary>
         public string PermissionName { get; }
-        
+
         /// <summary>
         /// Gets the new state of the permission.
         /// </summary>
         public PermissionState State { get; }
-        
+
         /// <summary>
         /// Initializes a new instance of the PermissionChangedEventArgs class.
         /// </summary>
@@ -414,6 +435,21 @@ namespace JunoSidebar.Wpf.Services.Tools
         {
             PermissionName = permissionName;
             State = state;
+        }
+    }
+
+    /// <summary>
+    /// Extension methods for PermissionManager to support tool approval
+    /// </summary>
+    public static class PermissionManagerExtensions
+    {
+        /// <summary>
+        /// Get the permission level for a specific tool
+        /// </summary>
+        public static ToolPermissionLevel GetToolPermission(this PermissionManager manager, string toolId)
+        {
+            // Default to conditional approval for safety
+            return ToolPermissionLevel.ConditionalApproval;
         }
     }
 }

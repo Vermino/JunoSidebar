@@ -8,7 +8,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using Anthropic.SDK;
-using Anthropic.SDK.Constants;
 using Anthropic.SDK.Messaging;
 
 namespace JunoSidebar.Wpf.Services.LLM.Providers
@@ -43,7 +42,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                 throw new ArgumentException("Anthropic API key is required");
             }
 
-            _client = new AnthropicClient(new APIAuthentication(configuration.ApiKey));
+            _client = new AnthropicClient(configuration.ApiKey);
             Debug.WriteLine("Anthropic provider initialized successfully");
 
             return Task.CompletedTask;
@@ -56,7 +55,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
             {
                 new ModelInfo
                 {
-                    Id = AnthropicModels.Claude3_5Sonnet,
+                    Id = "claude-3-5-sonnet-20241022",
                     Name = "Claude 3.5 Sonnet",
                     Description = "Most intelligent model",
                     ContextLength = 200000,
@@ -76,7 +75,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                 },
                 new ModelInfo
                 {
-                    Id = AnthropicModels.Claude3Opus,
+                    Id = "claude-3-opus-20240229",
                     Name = "Claude 3 Opus",
                     Description = "Most powerful model for complex tasks",
                     ContextLength = 200000,
@@ -86,7 +85,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                 },
                 new ModelInfo
                 {
-                    Id = AnthropicModels.Claude3Haiku,
+                    Id = "claude-3-haiku-20240307",
                     Name = "Claude 3 Haiku",
                     Description = "Fastest and most compact model",
                     ContextLength = 200000,
@@ -111,14 +110,18 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                 // Try a simple message to test the connection
                 var messages = new List<Message>
                 {
-                    new Message(RoleType.User, "Hi")
+                    new Message
+                    {
+                        Role = RoleType.User,
+                        Content = new List<ContentBase> { new TextContent { Text = "Hi" } }
+                    }
                 };
 
                 var parameters = new MessageParameters
                 {
                     Messages = messages,
                     MaxTokens = 10,
-                    Model = AnthropicModels.Claude3Haiku, // Use cheapest model for testing
+                    Model = "claude-3-haiku-20240307",
                     Stream = false,
                     Temperature = 1.0m
                 };
@@ -156,7 +159,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                 Stream = false,
                 Temperature = (decimal)options.Temperature,
                 TopP = options.TopP.HasValue ? (decimal)options.TopP.Value : null,
-                StopSequences = options.StopSequences
+                StopSequences = options.StopSequences?.ToArray()
             };
 
             // Add system prompt if provided
@@ -177,7 +180,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                     throw new Exception("No content in response");
                 }
 
-                var content = string.Join("", response.Content.Select(c => c.Text));
+                var content = string.Join("", response.Content.OfType<TextContent>().Select(c => c.Text));
 
                 return new LLMResponse
                 {
@@ -224,7 +227,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                 Stream = true,
                 Temperature = (decimal)options.Temperature,
                 TopP = options.TopP.HasValue ? (decimal)options.TopP.Value : null,
-                StopSequences = options.StopSequences
+                StopSequences = options.StopSequences?.ToArray()
             };
 
             // Add system prompt if provided
@@ -238,20 +241,24 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
 
             await foreach (var response in _client.Messages.StreamClaudeMessageAsync(parameters, cancellationToken))
             {
-                if (response.Delta?.Text != null)
+                if (response.Delta != null)
                 {
-                    yield return new LLMResponseChunk
+                    var textContent = response.Delta as TextContent;
+                    if (textContent?.Text != null)
                     {
-                        Content = response.Delta.Text,
-                        IsFinal = response.Delta.StopReason != null,
-                        Metadata = new Dictionary<string, object>
+                        yield return new LLMResponseChunk
                         {
-                            ["type"] = response.Type ?? string.Empty,
-                            ["stop_reason"] = response.Delta.StopReason ?? string.Empty
-                        }
-                    };
+                            Content = textContent.Text,
+                            IsFinal = response.Delta.StopReason != null,
+                            Metadata = new Dictionary<string, object>
+                            {
+                                ["type"] = response.StreamEvent ?? string.Empty,
+                                ["stop_reason"] = response.Delta.StopReason ?? string.Empty
+                            }
+                        };
+                    }
                 }
-                else if (response.Type == "message_stop")
+                else if (response.StreamEvent == "message_stop")
                 {
                     yield return new LLMResponseChunk
                     {
@@ -287,7 +294,11 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                     _ => RoleType.User
                 };
 
-                anthropicMessages.Add(new Message(role, msg.Content));
+                anthropicMessages.Add(new Message
+                {
+                    Role = role,
+                    Content = new List<ContentBase> { new TextContent { Text = msg.Content } }
+                });
             }
 
             return anthropicMessages;

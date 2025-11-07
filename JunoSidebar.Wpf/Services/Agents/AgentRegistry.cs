@@ -140,7 +140,7 @@ namespace JunoSidebar.Wpf.Services.Agents
                 }
 
                 // Determine agent type from config or file name
-                string agentType = config.CustomSettings?.GetValueOrDefault("type")?.ToString()
+                string agentType = config.Settings.CustomSettings?.GetValueOrDefault("type")?.ToString()
                     ?? "general";
 
                 if (!_agentFactories.ContainsKey(agentType))

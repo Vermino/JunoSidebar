@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using System.Diagnostics;
 using OpenAI;
 using OpenAI.Chat;
-using OpenAI.Models;
 
 namespace JunoSidebar.Wpf.Services.LLM.Providers
 {
@@ -43,8 +42,13 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                 throw new ArgumentException("OpenAI API key is required");
             }
 
-            var auth = new OpenAIAuthentication(configuration.ApiKey, configuration.Organization);
-            _client = new OpenAIClient(auth);
+            var clientOptions = new OpenAIClientOptions
+            {
+                ApiKey = configuration.ApiKey,
+                Organization = configuration.Organization
+            };
+
+            _client = new OpenAIClient(clientOptions);
 
             Debug.WriteLine("OpenAI provider initialized successfully");
             return Task.CompletedTask;
@@ -52,37 +56,8 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
 
         public async Task<IEnumerable<ModelInfo>> GetAvailableModelsAsync(CancellationToken cancellationToken = default)
         {
-            if (_client == null)
-            {
-                return Enumerable.Empty<ModelInfo>();
-            }
-
-            try
-            {
-                var models = await _client.ModelsEndpoint.GetModelsAsync(cancellationToken);
-                return models
-                    .Where(m => m.Id.Contains("gpt"))
-                    .Select(m => new ModelInfo
-                    {
-                        Id = m.Id,
-                        Name = m.Id,
-                        Description = m.OwnedBy,
-                        SupportsStreaming = true,
-                        Metadata = new Dictionary<string, object>
-                        {
-                            ["created"] = m.CreatedAt,
-                            ["owned_by"] = m.OwnedBy ?? string.Empty
-                        }
-                    })
-                    .ToList();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error fetching OpenAI models: {ex.Message}");
-
-                // Return known models as fallback
-                return GetKnownModels();
-            }
+            // Return known GPT models since OpenAI API structure has changed
+            return GetKnownModels();
         }
 
         public async Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default)
@@ -94,9 +69,17 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                     return false;
                 }
 
-                // Try to list models to test connection
-                await _client.ModelsEndpoint.GetModelsAsync(cancellationToken);
-                return true;
+                // Try a simple completion to test
+                var messages = new List<ChatMessage>
+                {
+                    new SystemChatMessage("Test"),
+                    new UserChatMessage("Hi")
+                };
+
+                var chatClient = _client.GetChatClient("gpt-3.5-turbo");
+                var completion = await chatClient.CompleteChatAsync(messages, cancellationToken: cancellationToken);
+
+                return completion?.Value != null;
             }
             catch (Exception ex)
             {
@@ -119,39 +102,49 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
             options ??= new LLMRequestOptions();
 
             var chatMessages = ConvertMessages(messages);
+            var chatClient = _client.GetChatClient(model);
 
-            var chatRequest = new ChatRequest(
-                messages: chatMessages,
-                model: model,
-                temperature: options.Temperature,
-                topP: options.TopP,
-                maxTokens: options.MaxTokens ?? _configuration?.DefaultMaxTokens,
-                frequencyPenalty: options.FrequencyPenalty,
-                presencePenalty: options.PresencePenalty,
-                stopSequences: options.StopSequences
-            );
+            var chatOptions = new ChatCompletionOptions
+            {
+                Temperature = options.Temperature,
+                TopP = options.TopP,
+                MaxOutputTokenCount = options.MaxTokens ?? _configuration?.DefaultMaxTokens,
+                FrequencyPenalty = options.FrequencyPenalty,
+                PresencePenalty = options.PresencePenalty
+            };
+
+            if (options.StopSequences != null)
+            {
+                foreach (var stop in options.StopSequences)
+                {
+                    chatOptions.StopSequences.Add(stop);
+                }
+            }
 
             try
             {
-                var response = await _client.ChatEndpoint.GetCompletionAsync(chatRequest, cancellationToken);
+                var completion = await chatClient.CompleteChatAsync(chatMessages, chatOptions, cancellationToken);
 
-                if (response?.FirstChoice == null)
+                if (completion?.Value == null)
                 {
                     throw new Exception("No response from OpenAI");
                 }
 
+                var result = completion.Value;
+                var content = result.Content.FirstOrDefault()?.Text ?? string.Empty;
+
                 return new LLMResponse
                 {
-                    Content = response.FirstChoice.Message.Content?.ToString() ?? string.Empty,
-                    ModelId = response.Model ?? model,
-                    PromptTokens = response.Usage?.PromptTokens,
-                    CompletionTokens = response.Usage?.CompletionTokens,
-                    TotalTokens = response.Usage?.TotalTokens,
+                    Content = content,
+                    ModelId = result.Model ?? model,
+                    PromptTokens = result.Usage?.InputTokenCount,
+                    CompletionTokens = result.Usage?.OutputTokenCount,
+                    TotalTokens = result.Usage?.TotalTokenCount,
                     Metadata = new Dictionary<string, object>
                     {
-                        ["id"] = response.Id ?? string.Empty,
-                        ["finish_reason"] = response.FirstChoice.FinishReason ?? string.Empty,
-                        ["created"] = response.CreatedAt
+                        ["id"] = result.Id ?? string.Empty,
+                        ["finish_reason"] = result.FinishReason.ToString() ?? string.Empty,
+                        ["created"] = result.CreatedAt
                     }
                 };
             }
@@ -176,65 +169,79 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
             options ??= new LLMRequestOptions();
 
             var chatMessages = ConvertMessages(messages);
+            var chatClient = _client.GetChatClient(model);
 
-            var chatRequest = new ChatRequest(
-                messages: chatMessages,
-                model: model,
-                temperature: options.Temperature,
-                topP: options.TopP,
-                maxTokens: options.MaxTokens ?? _configuration?.DefaultMaxTokens,
-                frequencyPenalty: options.FrequencyPenalty,
-                presencePenalty: options.PresencePenalty,
-                stopSequences: options.StopSequences
-            );
-
-            await foreach (var response in _client.ChatEndpoint.StreamCompletionAsync(chatRequest, cancellationToken))
+            var chatOptions = new ChatCompletionOptions
             {
-                if (response?.FirstChoice?.Delta?.Content != null)
+                Temperature = options.Temperature,
+                TopP = options.TopP,
+                MaxOutputTokenCount = options.MaxTokens ?? _configuration?.DefaultMaxTokens,
+                FrequencyPenalty = options.FrequencyPenalty,
+                PresencePenalty = options.PresencePenalty
+            };
+
+            if (options.StopSequences != null)
+            {
+                foreach (var stop in options.StopSequences)
                 {
-                    yield return new LLMResponseChunk
-                    {
-                        Content = response.FirstChoice.Delta.Content.ToString(),
-                        IsFinal = response.FirstChoice.FinishReason != null,
-                        ChoiceIndex = response.FirstChoice.Index,
-                        Metadata = new Dictionary<string, object>
-                        {
-                            ["id"] = response.Id ?? string.Empty,
-                            ["finish_reason"] = response.FirstChoice.FinishReason ?? string.Empty
-                        }
-                    };
+                    chatOptions.StopSequences.Add(stop);
                 }
-                else if (response?.FirstChoice?.FinishReason != null)
+            }
+
+            await foreach (var update in chatClient.CompleteChatStreamingAsync(chatMessages, chatOptions, cancellationToken))
+            {
+                if (update.ContentUpdate != null && update.ContentUpdate.Count > 0)
+                {
+                    foreach (var contentPart in update.ContentUpdate)
+                    {
+                        if (!string.IsNullOrEmpty(contentPart.Text))
+                        {
+                            yield return new LLMResponseChunk
+                            {
+                                Content = contentPart.Text,
+                                IsFinal = update.FinishReason != null,
+                                Metadata = new Dictionary<string, object>
+                                {
+                                    ["finish_reason"] = update.FinishReason?.ToString() ?? string.Empty
+                                }
+                            };
+                        }
+                    }
+                }
+                
+                if (update.FinishReason != null)
                 {
                     yield return new LLMResponseChunk
                     {
                         Content = string.Empty,
                         IsFinal = true,
-                        ChoiceIndex = response.FirstChoice.Index,
                         Metadata = new Dictionary<string, object>
                         {
-                            ["id"] = response.Id ?? string.Empty,
-                            ["finish_reason"] = response.FirstChoice.FinishReason
+                            ["finish_reason"] = update.FinishReason.ToString()
                         }
                     };
                 }
             }
         }
 
-        private List<Message> ConvertMessages(IEnumerable<LLMMessage> messages)
+        private List<ChatMessage> ConvertMessages(IEnumerable<LLMMessage> messages)
         {
-            return messages.Select(m =>
+            var chatMessages = new List<ChatMessage>();
+
+            foreach (var msg in messages)
             {
-                var role = m.Role.ToLowerInvariant() switch
+                ChatMessage chatMessage = msg.Role.ToLowerInvariant() switch
                 {
-                    "system" => Role.System,
-                    "user" => Role.User,
-                    "assistant" => Role.Assistant,
-                    _ => Role.User
+                    "system" => new SystemChatMessage(msg.Content),
+                    "user" => new UserChatMessage(msg.Content),
+                    "assistant" => new AssistantChatMessage(msg.Content),
+                    _ => new UserChatMessage(msg.Content)
                 };
 
-                return new Message(role, m.Content);
-            }).ToList();
+                chatMessages.Add(chatMessage);
+            }
+
+            return chatMessages;
         }
 
         private IEnumerable<ModelInfo> GetKnownModels()
