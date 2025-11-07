@@ -37,6 +37,10 @@ namespace JunoSidebar.Wpf.Services.Voice
         private readonly Random _random = new Random();
         private float _simulatedAudioLevel = 0f;
         private readonly Timer? _audioLevelTimer;
+        private readonly WhisperProcessor _whisperProcessor;
+        private readonly VoiceActivityDetector _vad;
+        private MemoryStream? _recordingBuffer;
+        private bool _isRecording = false;
 
         public event EventHandler<EventArgs>? WakeWordDetected;
         public event EventHandler<SpeechRecognizedEventArgs>? SpeechRecognized;
@@ -74,10 +78,28 @@ namespace JunoSidebar.Wpf.Services.Voice
                 _outputDevices.Add(new AudioDevice { Index = -1, Name = "Default Device" });
                 LoadVoiceSettings();
                 RefreshAudioDevices();
-                
+
+                // Initialize Whisper processor
+                _whisperProcessor = new WhisperProcessor();
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _whisperProcessor.InitializeAsync();
+                        Debug.WriteLine("Whisper processor initialized successfully");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error initializing Whisper: {ex.Message}");
+                    }
+                });
+
+                // Initialize Voice Activity Detector
+                _vad = new VoiceActivityDetector(sampleRate: 16000);
+
                 // Initialize audio level simulation timer
                 _audioLevelTimer = new Timer(SimulateAudioLevel, null, 0, 100);
-                
+
                 Debug.WriteLine("VoiceService initialization complete.");
             }
             catch (Exception ex)
@@ -357,51 +379,79 @@ namespace JunoSidebar.Wpf.Services.Voice
             {
                 if (_isListening)
                     return;
-                    
+
                 if (!_inputEnabled)
                     return;
-                    
+
                 Debug.WriteLine("Starting listening...");
                 _isListening = true;
                 _listeningCts = new CancellationTokenSource();
-                
-                // In a real implementation, we would start active speech recognition here
-                // For now, simulate with random recognition after a delay
-                Task.Run(async () => 
+                _recordingBuffer = new MemoryStream();
+                _isRecording = true;
+
+                // Start recording task
+                Task.Run(async () =>
                 {
-                    try 
+                    try
                     {
-                        if (_listeningCts.Token.IsCancellationRequested)
-                            return;
-                            
-                        // Random delay of 2-5 seconds before "recognizing" speech
-                        await Task.Delay(_random.Next(2000, 5000), _listeningCts.Token);
-                        
+                        // Wait for sufficient audio (e.g., 3-5 seconds)
+                        await Task.Delay(5000, _listeningCts.Token);
+
                         if (_isListening && !_listeningCts.Token.IsCancellationRequested)
                         {
-                            // Simulate recognition of a random phrase
-                            string[] phrases = new[] 
-                            {
-                                "What time is it?",
-                                "What's the weather like today?",
-                                "Tell me a joke",
-                                "Set a reminder for tomorrow",
-                                "How does this work?"
-                            };
-                            
-                            string recognizedText = phrases[_random.Next(phrases.Length)];
-                            SpeechRecognized?.Invoke(this, new SpeechRecognizedEventArgs(recognizedText, 0.9f));
+                            await ProcessRecordedAudioAsync(_listeningCts.Token);
                         }
                     }
                     catch (OperationCanceledException)
                     {
                         // Listening was cancelled, this is normal
+                        Debug.WriteLine("Listening cancelled");
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"Error in simulated speech recognition: {ex.Message}");
+                        Debug.WriteLine($"Error in speech recognition: {ex.Message}");
+                    }
+                    finally
+                    {
+                        _isRecording = false;
                     }
                 });
+            }
+        }
+
+        private async Task ProcessRecordedAudioAsync(CancellationToken cancellationToken)
+        {
+            if (_recordingBuffer == null || _recordingBuffer.Length == 0)
+            {
+                Debug.WriteLine("No audio recorded");
+                return;
+            }
+
+            try
+            {
+                Debug.WriteLine($"Processing {_recordingBuffer.Length} bytes of audio...");
+
+                var audioData = _recordingBuffer.ToArray();
+                var result = await _whisperProcessor.TranscribeAsync(audioData, cancellationToken);
+
+                if (result.Success && !string.IsNullOrWhiteSpace(result.Text))
+                {
+                    Debug.WriteLine($"Transcribed: {result.Text} (took {result.DurationMs}ms)");
+                    SpeechRecognized?.Invoke(this, new SpeechRecognizedEventArgs(result.Text, result.Confidence));
+                }
+                else
+                {
+                    Debug.WriteLine($"Transcription failed or produced no text: {result.ErrorMessage}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error processing recorded audio: {ex.Message}");
+            }
+            finally
+            {
+                _recordingBuffer?.Dispose();
+                _recordingBuffer = null;
             }
         }
 
@@ -411,11 +461,15 @@ namespace JunoSidebar.Wpf.Services.Voice
             {
                 if (!_isListening)
                     return;
-                    
+
                 Debug.WriteLine("Stopping listening...");
                 _isListening = false;
+                _isRecording = false;
                 _listeningCts?.Cancel();
                 _listeningCts = null;
+
+                _recordingBuffer?.Dispose();
+                _recordingBuffer = null;
             }
         }
 
@@ -478,14 +532,24 @@ namespace JunoSidebar.Wpf.Services.Voice
             try
             {
                 Debug.WriteLine("Starting audio input");
-                
+
                 if (_waveIn != null)
                 {
                     StopAudioInput();
                 }
-                
-                // In a real implementation, we would initialize the WaveIn device here
-                // For this implementation, we'll just use the timer to simulate audio levels
+
+                // Initialize WaveIn for real audio capture
+                _waveIn = new WaveInEvent
+                {
+                    DeviceNumber = _selectedInputDeviceIndex,
+                    WaveFormat = new WaveFormat(16000, 1) // 16kHz, mono for Whisper
+                };
+
+                _waveIn.DataAvailable += OnAudioDataAvailable;
+                _waveIn.RecordingStopped += OnRecordingStopped;
+
+                _waveIn.StartRecording();
+                Debug.WriteLine("Audio input started successfully");
             }
             catch (Exception ex)
             {
@@ -517,31 +581,45 @@ namespace JunoSidebar.Wpf.Services.Voice
 
         private void OnAudioDataAvailable(object? sender, WaveInEventArgs e)
         {
-            float audioLevel = CalculateAudioLevel(e.Buffer, e.BytesRecorded);
-            _audioLevelBuffer.Enqueue(audioLevel);
-            if (_audioLevelBuffer.Count > AudioLevelBufferSize)
+            try
             {
-                _audioLevelBuffer.Dequeue();
-            }
-            AudioLevelChanged?.Invoke(this, _audioLevelBuffer.ToArray());
-            
-            // In a real implementation, we would process the audio data for wake word detection
-            // and speech recognition here
-            
-            if (_isListening && audioLevel > 0.5f)
-            {
-                if (_random.Next(60) == 0)
+                // Calculate audio level for visualization
+                float audioLevel = CalculateAudioLevel(e.Buffer, e.BytesRecorded);
+                _audioLevelBuffer.Enqueue(audioLevel);
+                if (_audioLevelBuffer.Count > AudioLevelBufferSize)
                 {
-                    string recognizedText = "Hello Juno, what's the weather today?";
-                    SpeechRecognized?.Invoke(this, new SpeechRecognizedEventArgs(recognizedText, 0.9f));
+                    _audioLevelBuffer.Dequeue();
+                }
+                AudioLevelChanged?.Invoke(this, _audioLevelBuffer.ToArray());
+
+                // If we're recording, buffer the audio data
+                if (_isRecording && _recordingBuffer != null)
+                {
+                    _recordingBuffer.Write(e.Buffer, 0, e.BytesRecorded);
+                }
+
+                // Convert bytes to short samples for VAD
+                int sampleCount = e.BytesRecorded / 2;
+                short[] samples = new short[sampleCount];
+                Buffer.BlockCopy(e.Buffer, 0, samples, 0, e.BytesRecorded);
+
+                // Use VAD to detect speech activity
+                var vadState = _vad.ProcessAudio(samples, sampleCount);
+
+                // If not listening and speech detected, trigger wake word detection
+                if (!_isListening && vadState.IsSpeaking)
+                {
+                    // In future, implement proper wake word detection
+                    // For now, we'll just use voice activity as a trigger
+                    if (audioLevel > 0.3f && _random.Next(50) == 0)
+                    {
+                        WakeWordDetected?.Invoke(this, EventArgs.Empty);
+                    }
                 }
             }
-            else if (!_isListening && audioLevel > 0.7f)
+            catch (Exception ex)
             {
-                if (_random.Next(100) == 0)
-                {
-                    WakeWordDetected?.Invoke(this, EventArgs.Empty);
-                }
+                Debug.WriteLine($"Error processing audio data: {ex.Message}");
             }
         }
 
@@ -671,6 +749,8 @@ namespace JunoSidebar.Wpf.Services.Voice
             _listeningCts?.Cancel();
             _listeningCts?.Dispose();
             _audioLevelTimer?.Dispose();
+            _whisperProcessor?.Dispose();
+            _recordingBuffer?.Dispose();
         }
     }
 
