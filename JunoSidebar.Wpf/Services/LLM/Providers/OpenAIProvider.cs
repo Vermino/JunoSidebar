@@ -7,14 +7,13 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
-using OpenAI;
 using OpenAI.Chat;
 
 namespace JunoSidebar.Wpf.Services.LLM.Providers
 {
     public class OpenAIProvider : ILLMProvider
     {
-        private OpenAIClient? _client;
+        private ChatClient? _client;
         private ProviderConfiguration? _configuration;
 
         public string ProviderId => "openai";
@@ -42,22 +41,18 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                 throw new ArgumentException("OpenAI API key is required");
             }
 
-            var clientOptions = new OpenAIClientOptions
-            {
-                ApiKey = configuration.ApiKey,
-                Organization = configuration.Organization
-            };
-
-            _client = new OpenAIClient(clientOptions);
+            // Use default model or provided one for client initialization
+            var model = configuration.DefaultModel ?? "gpt-4-turbo";
+            _client = new ChatClient(model, configuration.ApiKey);
 
             Debug.WriteLine("OpenAI provider initialized successfully");
             return Task.CompletedTask;
         }
 
-        public async Task<IEnumerable<ModelInfo>> GetAvailableModelsAsync(CancellationToken cancellationToken = default)
+        public Task<IEnumerable<ModelInfo>> GetAvailableModelsAsync(CancellationToken cancellationToken = default)
         {
-            // Return known GPT models since OpenAI API structure has changed
-            return GetKnownModels();
+            // Return known GPT models
+            return Task.FromResult(GetKnownModels());
         }
 
         public async Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default)
@@ -76,9 +71,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                     new UserChatMessage("Hi")
                 };
 
-                var chatClient = _client.GetChatClient("gpt-3.5-turbo");
-                var completion = await chatClient.CompleteChatAsync(messages, cancellationToken: cancellationToken);
-
+                var completion = await _client.CompleteChatAsync(messages, cancellationToken: cancellationToken);
                 return completion?.Value != null;
             }
             catch (Exception ex)
@@ -101,8 +94,9 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
 
             options ??= new LLMRequestOptions();
 
+            // Create new client with the specified model
+            var chatClient = new ChatClient(model, _configuration?.ApiKey ?? throw new InvalidOperationException("API key not set"));
             var chatMessages = ConvertMessages(messages);
-            var chatClient = _client.GetChatClient(model);
 
             var chatOptions = new ChatCompletionOptions
             {
@@ -168,8 +162,9 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
 
             options ??= new LLMRequestOptions();
 
+            // Create new client with the specified model
+            var chatClient = new ChatClient(model, _configuration?.ApiKey ?? throw new InvalidOperationException("API key not set"));
             var chatMessages = ConvertMessages(messages);
-            var chatClient = _client.GetChatClient(model);
 
             var chatOptions = new ChatCompletionOptions
             {

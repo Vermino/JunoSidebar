@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net7.0-windows</TargetFramework>
+        <TargetFramework>net8.0-windows</TargetFramework>
         <UseWPF>true</UseWPF>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -20,7 +20,7 @@
 
         <!-- LLM Providers -->
         <PackageReference Include="Anthropic.SDK" Version="0.3.0" />
-        <PackageReference Include="Betalgo.OpenAI" Version="8.7.2" />
+        <PackageReference Include="OpenAI" Version="2.1.0" />
 
         <!-- Speech -->
         <PackageReference Include="Whisper.net" Version="1.7.4" />

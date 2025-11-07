@@ -225,7 +225,8 @@ namespace JunoSidebar.Wpf.Services.Voice
                 var downloadPath = Path.Combine(_modelsDirectory, modelFileName);
 
                 // Use Whisper.NET's built-in model downloader
-                using var modelStream = await WhisperGgmlDownloader.GetGgmlModelAsync(modelType, cancellationToken);
+                // Note: GetGgmlModelAsync in v1.7.4 doesn't take CancellationToken
+                using var modelStream = await WhisperGgmlDownloader.GetGgmlModelAsync(modelType);
                 using var fileStream = File.Create(downloadPath);
                 await modelStream.CopyToAsync(fileStream, cancellationToken);
 

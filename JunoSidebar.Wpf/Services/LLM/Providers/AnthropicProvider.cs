@@ -193,7 +193,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                     {
                         ["id"] = response.Id ?? string.Empty,
                         ["stop_reason"] = response.StopReason ?? string.Empty,
-                        ["role"] = response.Role ?? string.Empty
+                        ["role"] = response.Role?.ToString() ?? string.Empty
                     }
                 };
             }
@@ -241,24 +241,27 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
 
             await foreach (var response in _client.Messages.StreamClaudeMessageAsync(parameters, cancellationToken))
             {
+                // Check if this is a content delta with text
                 if (response.Delta != null)
                 {
-                    var textContent = response.Delta as TextContent;
-                    if (textContent?.Text != null)
+                    // Try to get text from the delta
+                    var deltaText = TryGetTextFromDelta(response.Delta);
+                    if (!string.IsNullOrEmpty(deltaText))
                     {
                         yield return new LLMResponseChunk
                         {
-                            Content = textContent.Text,
-                            IsFinal = response.Delta.StopReason != null,
+                            Content = deltaText,
+                            IsFinal = false,
                             Metadata = new Dictionary<string, object>
                             {
-                                ["type"] = response.StreamEvent ?? string.Empty,
-                                ["stop_reason"] = response.Delta.StopReason ?? string.Empty
+                                ["type"] = response.Type ?? string.Empty
                             }
                         };
                     }
                 }
-                else if (response.StreamEvent == "message_stop")
+
+                // Check for stream end
+                if (response.Type == "message_stop" || response.Type == "content_block_stop")
                 {
                     yield return new LLMResponseChunk
                     {
@@ -266,11 +269,38 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                         IsFinal = true,
                         Metadata = new Dictionary<string, object>
                         {
-                            ["type"] = "message_stop"
+                            ["type"] = response.Type
                         }
                     };
+                    break;
                 }
             }
+        }
+
+        private string? TryGetTextFromDelta(object delta)
+        {
+            // The delta object might have different types
+            // Try to access it as a TextContent or similar type
+            if (delta is TextContent textContent)
+            {
+                return textContent.Text;
+            }
+
+            // Try reflection to get Text property
+            try
+            {
+                var textProperty = delta.GetType().GetProperty("Text");
+                if (textProperty != null)
+                {
+                    return textProperty.GetValue(delta)?.ToString();
+                }
+            }
+            catch
+            {
+                // Ignore reflection errors
+            }
+
+            return null;
         }
 
         private List<Message> ConvertMessages(IEnumerable<LLMMessage> messages, out string? systemPrompt)
