@@ -33,6 +33,7 @@ namespace JunoSidebar.Wpf
         private DispatcherTimer _windowAdjustmentTimer;
         private readonly int _maxInitializationAttempts = 3;
         private int _initializationAttempts = 0;
+        private DebugConsole? _debugConsole;
 
         [DllImport("user32.dll")]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
@@ -77,6 +78,13 @@ namespace JunoSidebar.Wpf
             {
                 _dockingService.RestoreWindowsOnExit();
             }
+
+            // Close debug console if it exists
+            if (_debugConsole != null)
+            {
+                _debugConsole.Closing -= null; // Remove the cancel handler
+                _debugConsole.Close();
+            }
         }
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -87,9 +95,20 @@ namespace JunoSidebar.Wpf
                 var workArea = SystemParameters.WorkArea;
                 Left = workArea.Right - Width;
                 Top = workArea.Top;
-                Height = workArea.Height; 
+                Height = workArea.Height;
                 Debug.WriteLine($"Initializing window: Left={Left}, Top={Top}, Height={Height}, Width={Width}");
-                
+
+                // Initialize debug console in debug mode
+                if (App.IsDebugMode)
+                {
+                    _debugConsole = new DebugConsole();
+                    _debugConsole.Show();
+                    _debugConsole.Left = workArea.Left + 20;
+                    _debugConsole.Top = workArea.Top + 20;
+                    Services.DebugLogger.Instance.Initialize(_debugConsole);
+                    Services.DebugLogger.Instance.Log("Juno Sidebar starting...", "System");
+                }
+
                 await InitializeWebView();
                 
                 _dockingService = new DockingService(

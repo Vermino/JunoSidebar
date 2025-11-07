@@ -17,6 +17,8 @@
         <PackageReference Include="System.Speech" Version="9.0.4" />
         <PackageReference Include="System.Text.Json" Version="7.0.2" />
         <PackageReference Include="YamlDotNet" Version="16.3.0" />
+        <PackageReference Include="Whisper.net" Version="1.7.1" />
+        <PackageReference Include="Whisper.net.Runtime" Version="1.7.1" />
     </ItemGroup>
 
     <!-- Development-mode resources: copied to output directory -->

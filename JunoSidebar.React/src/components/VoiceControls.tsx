@@ -56,15 +56,14 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({
         const newStatus = !isOnline;
         setIsOnline(newStatus);
 
-        // Change state to match online status
+        // Send power on/off message to backend
         if (newStatus) {
-            // When going online, set to idle
+            // Power on - start always-on wake word detection
+            WpfBridge.sendMessage('powerOn');
             onStateChange('idle');
-            WpfBridge.sendMessage('setAssistantState', { state: 'idle' });
         } else {
-            // When going offline, make sure we stop any ongoing operations
-            WpfBridge.sendMessage('stopResponding');
-            WpfBridge.sendMessage('stopListening');
+            // Power off - stop all listening
+            WpfBridge.sendMessage('powerOff');
             onStateChange('idle');
         }
     };

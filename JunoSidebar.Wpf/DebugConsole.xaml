@@ -1,0 +1,119 @@
+<Window x:Class="JunoSidebar.Wpf.DebugConsole"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Juno Debug Console"
+        Height="600"
+        Width="800"
+        WindowStyle="ToolWindow"
+        ShowInTaskbar="True"
+        Topmost="False"
+        Background="#1E1E1E">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#252526" Padding="10" BorderBrush="#3E3E42" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                          Text="Debug Console - Voice Processing Logs"
+                          Foreground="#CCCCCC"
+                          FontWeight="SemiBold"
+                          VerticalAlignment="Center"/>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,10,0">
+                    <CheckBox x:Name="AutoScrollCheckBox"
+                             Content="Auto-scroll"
+                             IsChecked="True"
+                             Foreground="#CCCCCC"
+                             VerticalAlignment="Center"
+                             Margin="0,0,15,0"/>
+
+                    <ComboBox x:Name="FilterComboBox"
+                             Width="120"
+                             SelectionChanged="FilterComboBox_SelectionChanged"
+                             Background="#3C3C3C"
+                             Foreground="#CCCCCC">
+                        <ComboBoxItem Content="All Logs" IsSelected="True"/>
+                        <ComboBoxItem Content="Voice Only"/>
+                        <ComboBoxItem Content="VAD Only"/>
+                        <ComboBoxItem Content="Whisper Only"/>
+                        <ComboBoxItem Content="Errors Only"/>
+                    </ComboBox>
+                </StackPanel>
+
+                <Button Grid.Column="2"
+                       Content="Clear"
+                       Click="ClearButton_Click"
+                       Background="#3C3C3C"
+                       Foreground="#CCCCCC"
+                       BorderBrush="#555"
+                       Padding="15,5"
+                       Cursor="Hand"/>
+            </Grid>
+        </Border>
+
+        <!-- Log Content -->
+        <ScrollViewer Grid.Row="1"
+                     x:Name="LogScrollViewer"
+                     VerticalScrollBarVisibility="Auto"
+                     Background="#1E1E1E">
+            <TextBox x:Name="LogTextBox"
+                    IsReadOnly="True"
+                    TextWrapping="Wrap"
+                    FontFamily="Consolas, Courier New"
+                    FontSize="12"
+                    Background="Transparent"
+                    Foreground="#D4D4D4"
+                    BorderThickness="0"
+                    Padding="10"
+                    VerticalAlignment="Stretch"/>
+        </ScrollViewer>
+
+        <!-- Footer / Stats -->
+        <Border Grid.Row="2" Background="#252526" Padding="10" BorderBrush="#3E3E42" BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="StatsTextBlock"
+                          Grid.Column="0"
+                          Text="0 log entries"
+                          Foreground="#858585"
+                          FontSize="11"
+                          VerticalAlignment="Center"/>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <TextBlock Text="Status: "
+                              Foreground="#858585"
+                              FontSize="11"
+                              VerticalAlignment="Center"
+                              Margin="0,0,5,0"/>
+                    <Ellipse x:Name="StatusIndicator"
+                            Width="8"
+                            Height="8"
+                            Fill="#4EC9B0"
+                            VerticalAlignment="Center"/>
+                    <TextBlock x:Name="StatusText"
+                              Text="Running"
+                              Foreground="#4EC9B0"
+                              FontSize="11"
+                              VerticalAlignment="Center"
+                              Margin="5,0,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

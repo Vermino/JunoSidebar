@@ -142,10 +142,20 @@ namespace JunoSidebar.Wpf.Services
                         }
                         break;
                         
+                    case "poweron":
+                        _voiceService.PowerOn();
+                        SendMessageToUI("voiceSettings", _voiceService.GetVoiceSettings());
+                        break;
+
+                    case "poweroff":
+                        _voiceService.PowerOff();
+                        SendMessageToUI("voiceSettings", _voiceService.GetVoiceSettings());
+                        break;
+
                     case "startlistening":
                         _conversationService.StartListening();
                         break;
-                        
+
                     case "stoplistening":
                         _conversationService.StopListening();
                         break;
