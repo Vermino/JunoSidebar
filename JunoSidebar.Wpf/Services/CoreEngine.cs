@@ -121,15 +121,19 @@ namespace JunoSidebar.Wpf.Services
             {
                 string message = e.WebMessageAsJson;
                 Debug.WriteLine($"CoreEngine: Received message from UI: {message}");
-                
+
                 var messageObj = JsonSerializer.Deserialize<WebMessage>(message, _jsonOptions);
                 if (messageObj == null || string.IsNullOrEmpty(messageObj.Action))
                 {
                     Debug.WriteLine("CoreEngine: Invalid message received: null or empty action");
+                    DebugLogger.Instance.LogError("Invalid message received: null or empty action", "System");
                     return;
                 }
-                
-                switch (messageObj.Action.ToLowerInvariant())
+
+                string action = messageObj.Action.ToLowerInvariant();
+                DebugLogger.Instance.Log($"Received UI message: {action}", "System", DebugLogger.LogLevel.Info);
+
+                switch (action)
                 {
                     case "getpersonalities":
                         HandleGetPersonalities();
