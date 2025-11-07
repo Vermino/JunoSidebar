@@ -17,7 +17,7 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({
     const [voiceInputEnabled, setVoiceInputEnabled] = useState(true);
     const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(true);
     const [audioLevels, setAudioLevels] = useState<number[]>(Array(20).fill(0));
-    const [isOnline, setIsOnline] = useState(true);
+    const [isOnline, setIsOnline] = useState(false); // Start as false to match backend default
 
     useEffect(() => {
         // Request voice settings from backend
@@ -28,6 +28,9 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({
             if (data) {
                 setVoiceInputEnabled(data.inputEnabled);
                 setVoiceOutputEnabled(data.outputEnabled);
+                if (data.isOnline !== undefined) {
+                    setIsOnline(data.isOnline);
+                }
             }
         });
 
