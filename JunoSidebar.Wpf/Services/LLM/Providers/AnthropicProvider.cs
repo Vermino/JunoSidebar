@@ -193,7 +193,7 @@ namespace JunoSidebar.Wpf.Services.LLM.Providers
                     {
                         ["id"] = response.Id ?? string.Empty,
                         ["stop_reason"] = response.StopReason ?? string.Empty,
-                        ["role"] = response.Role?.ToString() ?? string.Empty
+                        ["role"] = response.Role.ToString()
                     }
                 };
             }
