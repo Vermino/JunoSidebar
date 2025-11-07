@@ -65,7 +65,7 @@ namespace JunoSidebar.Wpf.Services.Voice
         public string WakeWord => _wakeWord;
         public bool IsListening => _isRecordingCommand;
 
-        public VoiceService_New(WebService webService, string? voiceDataDirectory = null)
+        public VoiceService(WebService webService, string? voiceDataDirectory = null)
         {
             _webService = webService ?? throw new ArgumentNullException(nameof(webService));
             _voiceDataDirectory = voiceDataDirectory ?? Path.Combine(
