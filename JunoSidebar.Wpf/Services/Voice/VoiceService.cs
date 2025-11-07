@@ -1,4 +1,4 @@
-// File: JunoSidebar.Wpf/Services/Voice/VoiceService_New.cs
+// File: JunoSidebar.Wpf/Services/Voice/VoiceService.cs
 
 using System;
 using System.Collections.Generic;
@@ -15,7 +15,7 @@ namespace JunoSidebar.Wpf.Services.Voice
     /// <summary>
     /// Voice service with real Whisper transcription and VAD wake word detection
     /// </summary>
-    public class VoiceService_New : IDisposable
+    public class VoiceService : IDisposable
     {
         private readonly WebService _webService;
         private readonly string _voiceDataDirectory;
@@ -377,9 +377,10 @@ namespace JunoSidebar.Wpf.Services.Voice
         /// <summary>
         /// Stop recording and transcribe
         /// </summary>
-        public async Task StopListening()
+        public void StopListening()
         {
-            await StopRecordingAndTranscribe();
+            // Fire and forget - don't block the caller
+            Task.Run(async () => await StopRecordingAndTranscribe());
         }
 
         /// <summary>
@@ -587,6 +588,16 @@ namespace JunoSidebar.Wpf.Services.Voice
 
         #region Settings
 
+        /// <summary>
+        /// Initialize speech recognition (called during startup)
+        /// </summary>
+        public void InitializeSpeechRecognition()
+        {
+            // Initialization is now done in constructor and InitializeProcessors
+            // This method is kept for compatibility with CoreEngine
+            DebugLogger.Instance.LogVoice("InitializeSpeechRecognition called (already initialized)");
+        }
+
         public void SetVoiceInputEnabled(bool enabled)
         {
             if (_inputEnabled == enabled)
@@ -624,6 +635,26 @@ namespace JunoSidebar.Wpf.Services.Voice
 
             DebugLogger.Instance.LogVoice($"Wake word changed to: {wakeWord}");
             _wakeWord = wakeWord;
+            SaveVoiceSettings();
+        }
+
+        public void SetVoice(string voiceId)
+        {
+            if (string.IsNullOrWhiteSpace(voiceId) || _currentVoiceId == voiceId)
+                return;
+
+            DebugLogger.Instance.LogVoice($"Voice changed to: {voiceId}");
+            _currentVoiceId = voiceId;
+            SaveVoiceSettings();
+        }
+
+        public void SetVoiceSpeed(float speed)
+        {
+            if (speed < 0.5f || speed > 2.0f || Math.Abs(speed - _voiceSpeed) < 0.01f)
+                return;
+
+            DebugLogger.Instance.LogVoice($"Voice speed changed to: {speed}");
+            _voiceSpeed = speed;
             SaveVoiceSettings();
         }
 
