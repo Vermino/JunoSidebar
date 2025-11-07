@@ -15,12 +15,12 @@
         <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.1901.177" />
         <PackageReference Include="NAudio" Version="2.2.1" />
         <PackageReference Include="System.Speech" Version="9.0.4" />
-        <PackageReference Include="System.Text.Json" Version="7.0.2" />
+        <PackageReference Include="System.Text.Json" Version="8.0.6" />
         <PackageReference Include="YamlDotNet" Version="16.3.0" />
 
         <!-- LLM Providers -->
-        <PackageReference Include="Anthropic.SDK" Version="0.2.2" />
-        <PackageReference Include="Betalgo.OpenAI" Version="8.10.1" />
+        <PackageReference Include="Anthropic.SDK" Version="0.3.0" />
+        <PackageReference Include="Betalgo.OpenAI" Version="8.7.2" />
 
         <!-- Speech -->
         <PackageReference Include="Whisper.net" Version="1.7.4" />
