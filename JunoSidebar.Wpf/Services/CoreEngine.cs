@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Linq;
 using JunoSidebar.Wpf.Models;
 using JunoSidebar.Wpf.Services.LLM;
+using JunoSidebar.Wpf.Services.LLM.Providers;
 using JunoSidebar.Wpf.Services.Tools;
 using JunoSidebar.Wpf.Services.Voice;
 using Microsoft.Web.WebView2.Core;
@@ -19,6 +20,7 @@ namespace JunoSidebar.Wpf.Services
     {
         private readonly CoreWebView2 _webView;
         private readonly LLMFactory _llmFactory;
+        private readonly LLMProviderFactory _llmProviderFactory;
         private readonly PersonalityManager _personalityManager;
         private readonly ToolRegistry _toolRegistry;
         private readonly PermissionManager _permissionManager;
@@ -59,6 +61,7 @@ namespace JunoSidebar.Wpf.Services
             _webService = new WebService();
             _permissionManager = new PermissionManager();
             _llmFactory = new LLMFactory();
+            _llmProviderFactory = new LLMProviderFactory();
             _llmClient = _llmFactory.CreateClient(LLMFactory.LLMProvider.LMStudio);
             _contextManager = new ContextManager();
             _personalityManager = new PersonalityManager();
@@ -706,18 +709,14 @@ namespace JunoSidebar.Wpf.Services
 
         private void HandleGetLLMProviders()
         {
-            var providers = _llmFactory.GetSupportedProviders();
-            var providersList = new List<object>();
-            
-            foreach (var provider in providers)
+            var providersList = new List<object>
             {
-                providersList.Add(new
-                {
-                    id = provider.ToString().ToLowerInvariant(),
-                    displayName = _llmFactory.GetProviderDisplayName(provider)
-                });
-            }
-            
+                new { id = "anthropic", displayName = "Anthropic (Claude)" },
+                new { id = "openai", displayName = "OpenAI (ChatGPT)" },
+                new { id = "lmstudio", displayName = "LM Studio (Local)" },
+                new { id = "ollama", displayName = "Ollama (Local)" }
+            };
+
             SendMessageToUI("llmProvidersData", new { providers = providersList });
         }
 

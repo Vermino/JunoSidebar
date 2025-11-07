@@ -97,7 +97,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
         }
     });
     const [providers, setProviders] = useState<LLMProvider[]>([
-        { id: 'lmstudio', displayName: 'LM Studio (Local)' }
+        { id: 'anthropic', displayName: 'Anthropic (Claude)' },
+        { id: 'openai', displayName: 'OpenAI (ChatGPT)' },
+        { id: 'lmstudio', displayName: 'LM Studio (Local)' },
+        { id: 'ollama', displayName: 'Ollama (Local)' }
     ]);
     const [models, setModels] = useState<LLMModel[]>([
         { id: 'local-model', displayName: 'Default Local Model' }
@@ -325,29 +328,42 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                             <p className="text-xs text-blue-500 mt-1">Loading models...</p>
                                         )}
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
-                                        <input
-                                            type="text"
-                                            className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                            value={settings.llm.baseUrl}
-                                            onChange={e => setSettings(prev => ({
-                                                ...prev,
-                                                llm: {
-                                                    ...prev.llm,
-                                                    baseUrl: e.target.value
+                                    {(settings.llm.provider === 'lmstudio' || settings.llm.provider === 'ollama') && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
+                                            <input
+                                                type="text"
+                                                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                value={settings.llm.baseUrl}
+                                                onChange={e => setSettings(prev => ({
+                                                    ...prev,
+                                                    llm: {
+                                                        ...prev.llm,
+                                                        baseUrl: e.target.value
+                                                    }
+                                                }))}
+                                                placeholder={
+                                                    settings.llm.provider === 'lmstudio'
+                                                        ? "http://localhost:1234/v1"
+                                                        : "http://localhost:11434"
                                                 }
-                                            }))}
-                                            placeholder="http://localhost:1234/v1"
-                                        />
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            For LM Studio, this is typically http://localhost:1234/v1
-                                        </p>
-                                    </div>
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {settings.llm.provider === 'lmstudio'
+                                                    ? 'For LM Studio, this is typically http://localhost:1234/v1'
+                                                    : 'For Ollama, this is typically http://localhost:11434'}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            API Key
+                                            {(settings.llm.provider === 'anthropic' || settings.llm.provider === 'openai') && (
+                                                <span className="text-red-500 ml-1">*</span>
+                                            )}
+                                        </label>
                                         <input
                                             type="password"
                                             className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -359,8 +375,22 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ isOpen, onClose }) => {
                                                     apiKey: e.target.value
                                                 }
                                             }))}
-                                            placeholder="Not required for local models"
+                                            placeholder={
+                                                settings.llm.provider === 'anthropic'
+                                                    ? "sk-ant-..."
+                                                    : settings.llm.provider === 'openai'
+                                                    ? "sk-..."
+                                                    : "Not required for local models"
+                                            }
+                                            disabled={settings.llm.provider === 'lmstudio' || settings.llm.provider === 'ollama'}
                                         />
+                                        {(settings.llm.provider === 'anthropic' || settings.llm.provider === 'openai') && (
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                {settings.llm.provider === 'anthropic'
+                                                    ? 'Get your API key from https://console.anthropic.com/'
+                                                    : 'Get your API key from https://platform.openai.com/api-keys'}
+                                            </p>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
