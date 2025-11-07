@@ -108,6 +108,10 @@ namespace JunoSidebar.Wpf
 
         private void FilterComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // Skip if not fully initialized
+            if (LogTextBox == null || FilterComboBox.SelectedItem == null)
+                return;
+
             if (FilterComboBox.SelectedItem is ComboBoxItem selectedItem)
             {
                 _currentFilter = selectedItem.Content.ToString()?.Replace(" Logs", "").Replace(" Only", "") ?? "All";
@@ -117,15 +121,19 @@ namespace JunoSidebar.Wpf
 
         private void RefreshLogDisplay()
         {
+            // Safety check
+            if (LogTextBox == null)
+                return;
+
             LogTextBox.Clear();
             foreach (var entry in _allLogs.Where(ShouldShowLog))
             {
                 AppendLogToTextBox(entry);
             }
 
-            if (AutoScrollCheckBox.IsChecked == true)
+            if (AutoScrollCheckBox?.IsChecked == true)
             {
-                LogScrollViewer.ScrollToEnd();
+                LogScrollViewer?.ScrollToEnd();
             }
         }
 
