@@ -252,9 +252,14 @@ namespace JunoSidebar.Wpf.Services
                         break;
                         
                     case "savesettings":
+                        DebugLogger.Instance.Log("Received save settings request", "System", LogLevel.Info);
                         if (messageObj.TryGetProperty("settings", out Dictionary<string, object>? settings) && settings != null)
                         {
                             HandleSaveSettings(settings);
+                        }
+                        else
+                        {
+                            DebugLogger.Instance.LogError("Save settings failed: no settings object", "System");
                         }
                         break;
                         
@@ -442,14 +447,18 @@ namespace JunoSidebar.Wpf.Services
 
         private async void HandleSaveSettings(Dictionary<string, object> settings)
         {
+            DebugLogger.Instance.Log("HandleSaveSettings called", "System", LogLevel.Info);
+
             if (_isSavingSettings)
             {
                 Debug.WriteLine("CoreEngine: Save operation already in progress, ignoring duplicate request");
+                DebugLogger.Instance.Log("Save already in progress", "System", LogLevel.Warning);
                 return;
             }
-            
+
             _isSavingSettings = true;
-            
+            DebugLogger.Instance.Log("Starting settings save...", "System", LogLevel.Info);
+
             try
             {
                 Debug.WriteLine($"CoreEngine: Saving settings...");
@@ -532,13 +541,16 @@ namespace JunoSidebar.Wpf.Services
                 
                 // Apply LLM settings
                 await ApplyLLMSettings();
-                
+
+                DebugLogger.Instance.Log("Settings saved, sending response to UI", "System", LogLevel.Info);
+
                 // Send success notification with previous provider for comparison
-                SendMessageToUI("settingsSaved", new { 
+                SendMessageToUI("settingsSaved", new {
                     success = true,
                     previousProvider = previousProvider
                 });
-                
+
+                DebugLogger.Instance.Log("Settings saved response sent", "System", LogLevel.Info);
                 Debug.WriteLine("CoreEngine: Settings saved successfully");
             }
             catch (Exception ex)
