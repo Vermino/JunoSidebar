@@ -236,6 +236,15 @@ namespace JunoSidebar.Wpf.Services.Voice
             {
                 // Calculate and send audio levels to UI
                 float audioLevel = CalculateAudioLevel(e.Buffer, e.BytesRecorded);
+
+                // Log first audio data callback to verify this is being called
+                static bool firstAudioLog = false;
+                if (!firstAudioLog)
+                {
+                    DebugLogger.Instance.Log($"OnAudioDataForWakeWord: First audio data received, level: {audioLevel:F4}", "Voice", LogLevel.Info);
+                    firstAudioLog = true;
+                }
+
                 UpdateAudioLevels(audioLevel);
 
                 // Run VAD to detect speech
@@ -490,6 +499,15 @@ namespace JunoSidebar.Wpf.Services.Voice
         /// </summary>
         private void UpdateAudioLevels(float level)
         {
+            // Log first call to verify this method is being called
+            static bool firstLog = false;
+            if (!firstLog)
+            {
+                DebugLogger.Instance.Log($"UpdateAudioLevels called with level: {level:F4}", "Voice", LogLevel.Info);
+                DebugLogger.Instance.Log($"AudioLevelChanged has subscribers: {AudioLevelChanged != null}", "Voice", LogLevel.Info);
+                firstLog = true;
+            }
+
             _audioLevelBuffer.Enqueue(level);
             if (_audioLevelBuffer.Count > AudioLevelBufferSize)
             {
