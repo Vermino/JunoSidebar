@@ -319,7 +319,7 @@ namespace JunoSidebar.Wpf.Services.Voice
         }
 
         /// <summary>
-        /// Check if text contains wake word
+        /// Check if text contains wake word (with fuzzy matching for common Whisper mishearings)
         /// </summary>
         private bool ContainsWakeWord(string text)
         {
@@ -330,17 +330,40 @@ namespace JunoSidebar.Wpf.Services.Voice
             string normalizedText = text.ToLower().Trim();
             string normalizedWakeWord = _wakeWord.ToLower().Trim();
 
+            // Exact matches
             bool containsWakeWord = normalizedText.Contains(normalizedWakeWord);
             bool containsHeyJuno = normalizedText.Contains("hey juno");
             bool containsHiJuno = normalizedText.Contains("hi juno");
             bool containsHelloJuno = normalizedText.Contains("hello juno");
 
-            bool detected = containsWakeWord || containsHeyJuno || containsHiJuno || containsHelloJuno;
+            // Common Whisper mishearings of "Hey Juno"
+            bool containsYouKnow = normalizedText.Contains("you know");  // "Hey Juno" → "You know"
+            bool containsAJuno = normalizedText.Contains("a juno");       // "Hey Juno" → "A Juno"
+            bool containsEJuno = normalizedText.Contains("e juno");       // "Hey Juno" → "E Juno"
+            bool containsAgentO = normalizedText.Contains("agent o");     // "Hey Juno" → "Agent O"
+            bool containsHeyJuno2 = normalizedText.Contains("hajuno");    // "Hey Juno" → "Hajuno" (slurred)
 
-            // Log why wake word was or wasn't detected
-            if (!detected)
+            bool detected = containsWakeWord || containsHeyJuno || containsHiJuno || containsHelloJuno ||
+                           containsYouKnow || containsAJuno || containsEJuno || containsAgentO || containsHeyJuno2;
+
+            // Log which variation was detected or why it wasn't detected
+            if (detected)
             {
-                DebugLogger.Instance.Log($"Wake word NOT found. Transcription: \"{normalizedText}\" | Looking for: \"hey juno\", \"hi juno\", \"hello juno\"", "Voice", LogLevel.Info);
+                string matchedVariation = "unknown";
+                if (containsHeyJuno) matchedVariation = "hey juno";
+                else if (containsHiJuno) matchedVariation = "hi juno";
+                else if (containsHelloJuno) matchedVariation = "hello juno";
+                else if (containsYouKnow) matchedVariation = "you know (fuzzy match for 'hey juno')";
+                else if (containsAJuno) matchedVariation = "a juno (fuzzy match for 'hey juno')";
+                else if (containsEJuno) matchedVariation = "e juno (fuzzy match for 'hey juno')";
+                else if (containsAgentO) matchedVariation = "agent o (fuzzy match for 'hey juno')";
+                else if (containsHeyJuno2) matchedVariation = "hajuno (fuzzy match for 'hey juno')";
+
+                DebugLogger.Instance.Log($"Wake word MATCHED: '{matchedVariation}' in \"{normalizedText}\"", "Voice", LogLevel.Info);
+            }
+            else
+            {
+                DebugLogger.Instance.Log($"Wake word NOT found. Transcription: \"{normalizedText}\" | Looking for: \"hey juno\" (or fuzzy matches)", "Voice", LogLevel.Info);
             }
 
             return detected;
