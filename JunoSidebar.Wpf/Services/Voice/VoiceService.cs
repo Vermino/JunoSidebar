@@ -309,7 +309,32 @@ namespace JunoSidebar.Wpf.Services.Voice
                     DebugLogger.Instance.LogVoice("========================================");
                     DebugLogger.Instance.LogVoice("✓✓✓ WAKE WORD DETECTED! ✓✓✓");
                     DebugLogger.Instance.LogVoice("========================================");
-                    OnWakeWordDetected();
+
+                    // Extract command from the same transcription if present
+                    string command = ExtractCommandAfterWakeWord(transcription);
+
+                    if (!string.IsNullOrWhiteSpace(command))
+                    {
+                        // User said wake word + command in one breath
+                        DebugLogger.Instance.LogVoice($"Command extracted from wake word transcription: \"{command}\"");
+
+                        // Process the command immediately without waiting for new speech
+                        lock (_stateLock)
+                        {
+                            _isRecordingCommand = false;
+                        }
+
+                        // Trigger wake word detected event for UI
+                        WakeWordDetected?.Invoke(this, EventArgs.Empty);
+
+                        // Immediately recognize the speech
+                        SpeechRecognized?.Invoke(this, new SpeechRecognizedEventArgs(command, 1.0f));
+                    }
+                    else
+                    {
+                        // Only wake word detected, need to wait for command
+                        OnWakeWordDetected();
+                    }
                 }
             }
             catch (Exception ex)
@@ -479,6 +504,45 @@ namespace JunoSidebar.Wpf.Services.Voice
 
             // Return to wake word listening
             DebugLogger.Instance.SetStatus("Listening for wake word", true);
+        }
+
+        /// <summary>
+        /// Extract command after wake word (handles both exact and fuzzy matches)
+        /// </summary>
+        private string ExtractCommandAfterWakeWord(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return string.Empty;
+
+            string lowerText = text.ToLower();
+
+            // All possible wake word variations (exact and fuzzy)
+            string[] wakeWordVariations = {
+                "hey juno", "hi juno", "hello juno",
+                "you know",  // Fuzzy match
+                "a juno", "e juno", "agent o", "hajuno",  // More fuzzy matches
+                _wakeWord.ToLower()
+            };
+
+            foreach (var wakeWord in wakeWordVariations)
+            {
+                int index = lowerText.IndexOf(wakeWord);
+                if (index >= 0)
+                {
+                    // Extract everything after the wake word
+                    string command = text.Substring(index + wakeWord.Length).Trim();
+
+                    // Remove common separators and noise
+                    command = command.TrimStart(',', '.', '!', '?', ':').Trim();
+
+                    // Remove [BLANK_AUDIO] artifact
+                    command = command.Replace("[BLANK_AUDIO]", "").Replace("[blank_audio]", "").Trim();
+
+                    return command;
+                }
+            }
+
+            return string.Empty;
         }
 
         /// <summary>
