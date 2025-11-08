@@ -100,7 +100,12 @@ class WpfBridge {
                 : event.data;
 
             if (message && message.action) {
-                console.log(`Received message from WPF: ${message.action}`, message);
+                // Log state change messages more prominently
+                if (message.action === 'assistantStateChanged' || message.action === 'queryUpdate' || message.action === 'responseUpdate') {
+                    console.log(`🔵 UI UPDATE: ${message.action}`, message);
+                } else {
+                    console.log(`Received message from WPF: ${message.action}`, message);
+                }
                 this.emit(message.action, message);
             }
         } catch (error) {

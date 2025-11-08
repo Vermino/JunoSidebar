@@ -842,16 +842,19 @@ namespace JunoSidebar.Wpf.Services
         private void OnAssistantStateChanged(object? sender, AssistantStateChangedEventArgs e)
         {
             var stateString = e.State.ToString().ToLowerInvariant();
+            DebugLogger.Instance.Log($">>> SENDING TO UI: assistantStateChanged with state={stateString}", "System", LogLevel.Info);
             SendMessageToUI("assistantStateChanged", new { state = stateString });
         }
 
         private void OnQueryUpdated(object? sender, string query)
         {
+            DebugLogger.Instance.Log($">>> SENDING TO UI: queryUpdate with query={query}", "System", LogLevel.Info);
             SendMessageToUI("queryUpdate", new { query });
         }
 
         private void OnResponseUpdated(object? sender, ResponseUpdateEventArgs e)
         {
+            DebugLogger.Instance.Log($">>> SENDING TO UI: responseUpdate with response length={e.Response?.Length}, isComplete={e.IsComplete}", "System", LogLevel.Info);
             SendMessageToUI("responseUpdate", new
             {
                 response = e.Response,
@@ -919,6 +922,13 @@ namespace JunoSidebar.Wpf.Services
                 
                 // Serialize the message and send it
                 string json = JsonSerializer.Serialize(messageObject, _jsonOptions);
+
+                // Log the full message for assistantStateChanged to debug UI issue
+                if (action == "assistantStateChanged" || action == "queryUpdate" || action == "responseUpdate")
+                {
+                    DebugLogger.Instance.Log($">>> POSTING TO WEBVIEW: {json}", "System", LogLevel.Info);
+                }
+
                 _webView.PostWebMessageAsString(json);
 
                 // Log only the action to avoid filling the log with large payloads

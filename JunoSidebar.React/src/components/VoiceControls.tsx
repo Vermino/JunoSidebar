@@ -43,8 +43,12 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({
 
         // Listen for state changes from the backend
         const stateChangeUnsubscribe = WpfBridge.on('assistantStateChanged', (data: any) => {
+            console.log('🟢 VoiceControls received assistantStateChanged:', data);
             if (data && data.state) {
+                console.log(`🟢 Calling onStateChange with state: ${data.state}`);
                 onStateChange(data.state as 'idle' | 'listening' | 'processing' | 'responding');
+            } else {
+                console.error('🔴 assistantStateChanged data is missing state property:', data);
             }
         });
 

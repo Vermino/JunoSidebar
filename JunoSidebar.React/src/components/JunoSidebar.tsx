@@ -17,6 +17,11 @@ const JunoSidebar: React.FC = () => {
     const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
     const [manageToolsPanelOpen, setManageToolsPanelOpen] = useState(false);
 
+    // Log when activeState changes
+    useEffect(() => {
+        console.log(`🔵 JunoSidebar activeState changed to: ${activeState}`);
+    }, [activeState]);
+
     const handleToggleExpanded = useCallback(() => {
         const newExpandedState = !expanded;
         setExpanded(newExpandedState);
