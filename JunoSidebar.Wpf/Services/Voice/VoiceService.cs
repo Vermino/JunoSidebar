@@ -306,7 +306,9 @@ namespace JunoSidebar.Wpf.Services.Voice
                 // Check if wake word is present (case-insensitive, fuzzy match)
                 if (ContainsWakeWord(transcription))
                 {
-                    DebugLogger.Instance.LogVoice("✓ WAKE WORD DETECTED!");
+                    DebugLogger.Instance.LogVoice("========================================");
+                    DebugLogger.Instance.LogVoice("✓✓✓ WAKE WORD DETECTED! ✓✓✓");
+                    DebugLogger.Instance.LogVoice("========================================");
                     OnWakeWordDetected();
                 }
             }
@@ -328,10 +330,20 @@ namespace JunoSidebar.Wpf.Services.Voice
             string normalizedText = text.ToLower().Trim();
             string normalizedWakeWord = _wakeWord.ToLower().Trim();
 
-            return normalizedText.Contains(normalizedWakeWord) ||
-                   normalizedText.Contains("hey juno") ||
-                   normalizedText.Contains("hi juno") ||
-                   normalizedText.Contains("hello juno");
+            bool containsWakeWord = normalizedText.Contains(normalizedWakeWord);
+            bool containsHeyJuno = normalizedText.Contains("hey juno");
+            bool containsHiJuno = normalizedText.Contains("hi juno");
+            bool containsHelloJuno = normalizedText.Contains("hello juno");
+
+            bool detected = containsWakeWord || containsHeyJuno || containsHiJuno || containsHelloJuno;
+
+            // Log why wake word was or wasn't detected
+            if (!detected)
+            {
+                DebugLogger.Instance.Log($"Wake word NOT found. Transcription: \"{normalizedText}\" | Looking for: \"hey juno\", \"hi juno\", \"hello juno\"", "Voice", LogLevel.Info);
+            }
+
+            return detected;
         }
 
         /// <summary>
