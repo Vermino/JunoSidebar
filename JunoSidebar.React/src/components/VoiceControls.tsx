@@ -102,14 +102,36 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({
         }
     };
 
-    const getStateColor = () => {
-        if (!isOnline) return 'gray';
-
+    // Get background class (full class names for Tailwind)
+    const getBackgroundClass = () => {
+        if (!isOnline) return 'bg-gray-100';
         switch (activeState) {
-            case 'listening': return 'blue';
-            case 'processing': return 'purple';
-            case 'responding': return 'green';
-            default: return 'gray';
+            case 'listening': return 'bg-blue-100';
+            case 'processing': return 'bg-purple-100';
+            case 'responding': return 'bg-green-100';
+            default: return 'bg-gray-100';
+        }
+    };
+
+    // Get text color class (full class names for Tailwind)
+    const getTextColorClass = () => {
+        if (!isOnline) return 'text-gray-500';
+        switch (activeState) {
+            case 'listening': return 'text-blue-500';
+            case 'processing': return 'text-purple-500';
+            case 'responding': return 'text-green-500';
+            default: return 'text-gray-500';
+        }
+    };
+
+    // Get audio bar color class (full class names for Tailwind)
+    const getAudioBarColorClass = () => {
+        if (!isOnline) return 'bg-gray-300';
+        switch (activeState) {
+            case 'listening': return 'bg-blue-400';
+            case 'processing': return 'bg-purple-400';
+            case 'responding': return 'bg-green-400';
+            default: return 'bg-gray-400';
         }
     };
 
@@ -118,16 +140,16 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({
         return (
             <div className="flex justify-center py-2">
                 <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer bg-${getStateColor()}-100`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer ${getBackgroundClass()}`}
                     onClick={isOnline ? handleMicToggle : toggleOnlineStatus}
                 >
                     {!isOnline ? (
                         <PowerOff size={20} className="text-gray-500" />
                     ) : (
                         activeState === 'listening' ? (
-                            <MicOff size={20} className={`text-${getStateColor()}-500`} />
+                            <MicOff size={20} className={getTextColorClass()} />
                         ) : (
-                            <Mic size={20} className={`text-${getStateColor()}-500`} />
+                            <Mic size={20} className={getTextColorClass()} />
                         )
                     )}
                 </div>
@@ -140,25 +162,21 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({
             <div className="mb-4 text-center">
                 <div className="mb-2">
                     <div
-                        className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center ${
-                            isOnline ? `bg-${getStateColor()}-100` : 'bg-gray-100'
-                        } cursor-pointer`}
+                        className={`w-16 h-16 rounded-full mx-auto flex items-center justify-center ${getBackgroundClass()} cursor-pointer`}
                         onClick={isOnline ? handleMicToggle : toggleOnlineStatus}
                     >
                         {!isOnline ? (
                             <PowerOff size={24} className="text-gray-500" />
                         ) : activeState === 'responding' ? (
-                            <Power size={24} className={`text-${getStateColor()}-500`} onClick={handleStopResponding} />
+                            <Power size={24} className={getTextColorClass()} onClick={handleStopResponding} />
                         ) : activeState === 'listening' ? (
-                            <MicOff size={24} className={`text-${getStateColor()}-500`} />
+                            <MicOff size={24} className={getTextColorClass()} />
                         ) : (
-                            <Mic size={24} className={`text-${getStateColor()}-500`} />
+                            <Mic size={24} className={getTextColorClass()} />
                         )}
                     </div>
                 </div>
-                <p className={`font-medium text-sm ${
-                    isOnline ? `text-${getStateColor()}-500` : 'text-gray-500'
-                }`}>
+                <p className={`font-medium text-sm ${getTextColorClass()}`}>
                     {!isOnline ? 'Offline' :
                         activeState === 'idle' ? 'Say "Hey Juno"' :
                             activeState === 'listening' ? 'Listening...' :
@@ -171,11 +189,7 @@ const VoiceControls: React.FC<VoiceControlsProps> = ({
                 {audioLevels.map((level, i) => (
                     <div
                         key={i}
-                        className={`w-1 ${
-                            isOnline
-                                ? `bg-${activeState === 'listening' ? 'blue' : getStateColor()}-400`
-                                : 'bg-gray-300'
-                        } rounded-full transition-all duration-100`}
+                        className={`w-1 ${getAudioBarColorClass()} rounded-full transition-all duration-100`}
                         style={{ height: `${Math.max(2, level * 100)}%` }}
                     />
                 ))}
