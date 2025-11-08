@@ -1026,16 +1026,18 @@ namespace JunoSidebar.Wpf.Services
         private class WebMessage
         {
             public string Action { get; set; } = string.Empty;
-            public JsonElement Data { get; set; }
-            
+
+            [System.Text.Json.Serialization.JsonExtensionData]
+            public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+
             public bool TryGetProperty<T>(string propertyName, out T? value)
             {
                 value = default;
-                
+
                 try
                 {
-                    // Try to find the property in the Data element
-                    if (Data.ValueKind == JsonValueKind.Object && Data.TryGetProperty(propertyName, out var property))
+                    // Check if the property exists in the extension data (top-level properties)
+                    if (ExtensionData != null && ExtensionData.TryGetValue(propertyName, out var property))
                     {
                         value = property.Deserialize<T>(new JsonSerializerOptions
                         {
@@ -1043,7 +1045,7 @@ namespace JunoSidebar.Wpf.Services
                         });
                         return value != null;
                     }
-                    
+
                     return false;
                 }
                 catch
