@@ -877,6 +877,14 @@ namespace JunoSidebar.Wpf.Services
 
         private void OnAudioLevelChanged(object? sender, float[] levels)
         {
+            // Log first audio level update to verify it's being called
+            static bool firstLog = false;
+            if (!firstLog)
+            {
+                DebugLogger.Instance.Log($"Audio levels event triggered - sending {levels.Length} levels", "Voice", LogLevel.Info);
+                firstLog = true;
+            }
+
             // Send audio levels but don't log every single frame (too spammy)
             SendMessageToUI("audioLevels", new { levels });
         }
