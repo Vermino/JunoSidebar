@@ -33,6 +33,7 @@ namespace JunoSidebar.Wpf.Services
         private readonly string _uiSettingsPath;
         private bool _isInitialized = false;
         private bool _isSavingSettings = false;
+        private bool _firstAudioLevelEventLogged = false;
 
         public CoreEngine(CoreWebView2 webView)
         {
@@ -878,11 +879,10 @@ namespace JunoSidebar.Wpf.Services
         private void OnAudioLevelChanged(object? sender, float[] levels)
         {
             // Log first audio level update to verify it's being called
-            static bool firstLog = false;
-            if (!firstLog)
+            if (!_firstAudioLevelEventLogged)
             {
                 DebugLogger.Instance.Log($"Audio levels event triggered - sending {levels.Length} levels", "Voice", LogLevel.Info);
-                firstLog = true;
+                _firstAudioLevelEventLogged = true;
             }
 
             // Send audio levels but don't log every single frame (too spammy)

@@ -53,6 +53,10 @@ namespace JunoSidebar.Wpf.Services.Voice
         private const int Channels = 1;
         private const int BitsPerSample = 16;
 
+        // Diagnostic logging flags
+        private bool _firstAudioDataLogged = false;
+        private bool _firstAudioLevelUpdateLogged = false;
+
         // Events
         public event EventHandler<EventArgs>? WakeWordDetected;
         public event EventHandler<SpeechRecognizedEventArgs>? SpeechRecognized;
@@ -238,11 +242,10 @@ namespace JunoSidebar.Wpf.Services.Voice
                 float audioLevel = CalculateAudioLevel(e.Buffer, e.BytesRecorded);
 
                 // Log first audio data callback to verify this is being called
-                static bool firstAudioLog = false;
-                if (!firstAudioLog)
+                if (!_firstAudioDataLogged)
                 {
                     DebugLogger.Instance.Log($"OnAudioDataForWakeWord: First audio data received, level: {audioLevel:F4}", "Voice", LogLevel.Info);
-                    firstAudioLog = true;
+                    _firstAudioDataLogged = true;
                 }
 
                 UpdateAudioLevels(audioLevel);
@@ -500,12 +503,11 @@ namespace JunoSidebar.Wpf.Services.Voice
         private void UpdateAudioLevels(float level)
         {
             // Log first call to verify this method is being called
-            static bool firstLog = false;
-            if (!firstLog)
+            if (!_firstAudioLevelUpdateLogged)
             {
                 DebugLogger.Instance.Log($"UpdateAudioLevels called with level: {level:F4}", "Voice", LogLevel.Info);
                 DebugLogger.Instance.Log($"AudioLevelChanged has subscribers: {AudioLevelChanged != null}", "Voice", LogLevel.Info);
-                firstLog = true;
+                _firstAudioLevelUpdateLogged = true;
             }
 
             _audioLevelBuffer.Enqueue(level);
