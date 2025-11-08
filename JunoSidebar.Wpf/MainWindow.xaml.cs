@@ -166,9 +166,14 @@ namespace JunoSidebar.Wpf
                 
                 var webView2Environment = await CoreWebView2Environment.CreateAsync(null, webViewUserDataFolder, options);
                 await WebView.EnsureCoreWebView2Async(webView2Environment);
-                
+
                 Debug.WriteLine("WebView2 core initialized successfully");
-                
+
+                // CLEAR CACHE to force reload of updated JavaScript files
+                Debug.WriteLine("Clearing WebView2 cache to force reload...");
+                await WebView.CoreWebView2.Profile.ClearBrowsingDataAsync();
+                Debug.WriteLine("WebView2 cache cleared");
+
                 // Configure WebView2 settings
                 WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = App.IsDebugMode;
                 WebView.CoreWebView2.Settings.AreDevToolsEnabled = App.IsDebugMode;
