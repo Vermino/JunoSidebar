@@ -877,6 +877,7 @@ namespace JunoSidebar.Wpf.Services
 
         private void OnAudioLevelChanged(object? sender, float[] levels)
         {
+            // Send audio levels but don't log every single frame (too spammy)
             SendMessageToUI("audioLevels", new { levels });
         }
 
