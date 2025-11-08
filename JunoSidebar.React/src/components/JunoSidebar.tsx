@@ -86,6 +86,14 @@ const JunoSidebar: React.FC = () => {
         };
     }, []);
 
+    // Auto-expand sidebar when assistant starts responding
+    useEffect(() => {
+        if (activeState === 'responding' && !expanded) {
+            setExpanded(true);
+            WpfBridge.setExpanded(true);
+        }
+    }, [activeState, expanded]);
+
     const runDemo = useCallback(async () => {
         setActiveState('listening');
         setCurrentQuery('Hey Juno, what meetings do I have today?');

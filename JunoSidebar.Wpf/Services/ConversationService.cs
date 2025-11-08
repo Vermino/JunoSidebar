@@ -285,7 +285,8 @@ namespace JunoSidebar.Wpf.Services
         {
             if (CurrentState == newState)
                 return;
-            
+
+            DebugLogger.Instance.Log($"Assistant state changing: {CurrentState} → {newState}", "Conversation", LogLevel.Info);
             CurrentState = newState;
             AssistantStateChanged?.Invoke(this, new AssistantStateChangedEventArgs(newState));
         }
@@ -333,6 +334,7 @@ namespace JunoSidebar.Wpf.Services
 
         private void OnWakeWordDetected(object? sender, EventArgs e)
         {
+            DebugLogger.Instance.Log("Wake word detected event received - setting state to Listening", "Conversation", LogLevel.Info);
             SetAssistantState(AssistantState.Listening);
         }
 
