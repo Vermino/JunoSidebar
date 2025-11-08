@@ -85,18 +85,23 @@ namespace JunoSidebar.Wpf.Services
         {
             if (string.IsNullOrWhiteSpace(query))
                 return;
-            
+
+            DebugLogger.Instance.Log($"ProcessQueryAsync called with query: \"{query}\"", "Conversation", LogLevel.Info);
+
             // Cancel any ongoing conversation
             CancelCurrentConversation();
-            
+
             // Create a new cancellation token source
             _currentConversationCts = new CancellationTokenSource();
             var cancellationToken = _currentConversationCts.Token;
-            
+
             try
             {
                 // Update the UI
+                DebugLogger.Instance.Log("Sending queryUpdate to UI", "Conversation", LogLevel.Info);
                 QueryUpdated?.Invoke(this, query);
+
+                DebugLogger.Instance.Log("Setting state to Processing", "Conversation", LogLevel.Info);
                 SetAssistantState(AssistantState.Processing);
                 _isProcessing = true;
                 
@@ -128,12 +133,14 @@ namespace JunoSidebar.Wpf.Services
                 }
                 
                 // Start the streaming response
+                DebugLogger.Instance.Log("Setting state to Responding", "Conversation", LogLevel.Info);
                 SetAssistantState(AssistantState.Responding);
-                
+
                 // Buffer for collecting the full response
                 var responseBuffer = new System.Text.StringBuilder();
-                
+
                 // Process the streaming response
+                DebugLogger.Instance.Log("Starting LLM streaming response", "Conversation", LogLevel.Info);
                 await foreach (var chunk in _llmClient.GetStreamingChatCompletionAsync(
                     messages,
                     model: "local-model", // This should come from settings
@@ -142,35 +149,37 @@ namespace JunoSidebar.Wpf.Services
                 {
                     if (cancellationToken.IsCancellationRequested)
                         break;
-                    
+
                     // Append the chunk to the buffer
                     responseBuffer.Append(chunk.Content);
-                    
+
                     // Send the partial response to the UI
                     ResponseUpdated?.Invoke(this, new ResponseUpdateEventArgs
                     {
                         Response = responseBuffer.ToString(),
                         IsComplete = chunk.IsFinal
                     });
-                    
+
                     // Check if this is the final chunk
                     if (chunk.IsFinal)
                     {
+                        DebugLogger.Instance.Log($"LLM response complete: \"{responseBuffer.ToString()}\"", "Conversation", LogLevel.Info);
+
                         // Add the assistant message to the context
                         _contextManager.AddAssistantMessage(responseBuffer.ToString());
-                        
+
                         // Speak the response if voice output is enabled
                         if (_voiceService.OutputEnabled)
                         {
                             await _voiceService.SpeakAsync(responseBuffer.ToString());
                         }
-                        
+
                         // Process any tool calls in the response
                         await ProcessToolCallsAsync(responseBuffer.ToString(), cancellationToken);
-                        
+
                         // Set the state back to idle
                         SetAssistantState(AssistantState.Idle);
-                        
+
                         // Save the conversation history
                         await _contextManager.SaveConversationAsync();
                     }
@@ -184,12 +193,25 @@ namespace JunoSidebar.Wpf.Services
             catch (Exception ex)
             {
                 // Handle errors
-                Console.WriteLine($"Error processing query: {ex.Message}");
+                DebugLogger.Instance.LogError($"Error processing query: {ex.Message}", "Conversation");
+                DebugLogger.Instance.LogError($"Stack trace: {ex.StackTrace}", "Conversation");
+
+                // Send a mock response to demonstrate the visual flow
+                SetAssistantState(AssistantState.Responding);
+
+                string mockResponse = $"I heard your query: '{query}'. However, I'm having trouble connecting to the language model. Please check your LLM settings.";
+
+                DebugLogger.Instance.Log($"Sending mock response due to error: {mockResponse}", "Conversation", LogLevel.Info);
+
                 ResponseUpdated?.Invoke(this, new ResponseUpdateEventArgs
                 {
-                    Response = $"I'm sorry, but an error occurred: {ex.Message}",
+                    Response = mockResponse,
                     IsComplete = true
                 });
+
+                // Wait a moment so user can see the responding state
+                await Task.Delay(2000);
+
                 SetAssistantState(AssistantState.Idle);
             }
             finally
@@ -340,10 +362,17 @@ namespace JunoSidebar.Wpf.Services
 
         private void OnSpeechRecognized(object? sender, SpeechRecognizedEventArgs e)
         {
+            DebugLogger.Instance.Log($"OnSpeechRecognized called with text: \"{e.Text}\" | CurrentState: {CurrentState}", "Conversation", LogLevel.Info);
+
             if (CurrentState == AssistantState.Listening)
             {
                 // Only process speech if we're in listening mode
+                DebugLogger.Instance.Log("State is Listening - calling ProcessQueryAsync", "Conversation", LogLevel.Info);
                 Task.Run(() => ProcessQueryAsync(e.Text)).ConfigureAwait(false);
+            }
+            else
+            {
+                DebugLogger.Instance.LogError($"Speech recognized but state is {CurrentState}, not Listening. Speech ignored.", "Conversation");
             }
         }
     }
