@@ -12,12 +12,22 @@ class WpfBridge {
         // Check if running in WebView2
         this.isWebView2 = this.checkIsWebView2();
 
+        console.log(`🟡 WpfBridge constructor starting. WebView2: ${this.isWebView2}`);
+
         // Setup message listener from WPF
         if (this.isWebView2) {
             // In WebView2, listen to messages from the chrome.webview API
-            (window as any).chrome.webview.addEventListener('message', this.handleMessageFromWpf.bind(this));
+            console.log('🟡 Setting up chrome.webview.addEventListener');
+
+            // Add raw listener to debug
+            (window as any).chrome.webview.addEventListener('message', (event: any) => {
+                console.log('🔴 RAW MESSAGE EVENT RECEIVED:', event);
+                console.log('🔴 RAW MESSAGE DATA:', event.data);
+                this.handleMessageFromWpf(event);
+            });
         } else {
             // In browser, use standard window.postMessage
+            console.log('🟡 Setting up window.addEventListener');
             window.addEventListener('message', this.handleMessageFromWpf.bind(this));
         }
 
